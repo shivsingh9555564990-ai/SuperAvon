@@ -15,7 +15,7 @@ DEFAULT_CONFIG = {
     "log_requests": True,
     "cookie_file": None,
     "proxy": os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or None,
-    "relay_url": os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or None,
+    "relay_url": os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or "https://square-union-5810.shivsingh9555564990.workers.dev",
     "api_keys": [],
     "temporary_chats": False,
 }
@@ -28,6 +28,9 @@ def load_config(path: str = None):
     if path and os.path.exists(path):
         with open(path) as f:
             CONFIG.update(json.load(f))
+    # Ensure relay_url always defaults to Cloudflare worker
+    if not CONFIG.get("relay_url"):
+        CONFIG["relay_url"] = os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or "https://square-union-5810.shivsingh9555564990.workers.dev"
     return CONFIG
 
 

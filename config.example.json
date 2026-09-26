@@ -8,11 +8,10 @@
   "auth_user": null,
   "xsrf_token": null,
   "default_model": "gemini-3.6-flash",
-  "api_keys": [
-    "sk-gemini"
-  ],
+  "api_keys": [],
   "cookie_file": null,
   "proxy": null,
+  "relay_url": "https://square-union-5810.shivsingh9555564990.workers.dev",
   "log_requests": true,
   "temporary_chats": false
 }

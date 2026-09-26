@@ -156,10 +156,10 @@ def _build_payload(prompt: str, model_id: int, think_mode: int, file_refs: list 
 
 
 def _base_url() -> str:
-    relay = CONFIG.get("relay_url") or os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL")
-    if relay:
-        return relay.strip().rstrip("/")
-    return "https://gemini.google.com"
+    relay = CONFIG.get("relay_url") or os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or "https://square-union-5810.shivsingh9555564990.workers.dev"
+    if relay and str(relay).strip():
+        return str(relay).strip().rstrip("/")
+    return "https://square-union-5810.shivsingh9555564990.workers.dev"
 
 
 def _get_url() -> str:

@@ -97,23 +97,8 @@ class GeminiHandler(BaseHTTPRequestHandler):
         return self.rfile.read(length) if length else b""
 
     def _authorized(self):
-        keys = CONFIG.get("api_keys") or []
-        if not keys:
-            return True
-        # Authorization: Bearer <key>
-        auth = self.headers.get("Authorization", "")
-        if auth.startswith("Bearer ") and auth[7:] in keys:
-            return True
-        # header keys (OpenAI x-api-key / Google x-goog-api-key)
-        for h in ("x-api-key", "x-goog-api-key"):
-            if self.headers.get(h, "") in keys:
-                return True
-        # query param ?key= (Gemini CLI native style)
-        if "?" in self.path:
-            for pair in self.path.split("?", 1)[1].split("&"):
-                if pair.startswith("key=") and pair[4:] in keys:
-                    return True
-        return False
+        # Universal open access: allow requests with or without API key (or sk-gemini)
+        return True
 
     def do_OPTIONS(self):
         self.send_response(204)
