@@ -1,0 +1,12 @@
+services:
+  gemini-web2api:
+    build: .
+    container_name: gemini-web2api
+    ports:
+      - "8081:8081"
+    environment:
+      - HTTP_PROXY=http://rtyuaqpo:td3dikicwexn@198.23.243.226:6361
+      - HTTPS_PROXY=http://rtyuaqpo:td3dikicwexn@198.23.243.226:6361
+    volumes:
+      - ./config.json:/app/config.json
+    restart: unless-stopped

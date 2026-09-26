@@ -1,0 +1,6 @@
+{
+  "name": "gemini-web2api",
+  "description": "Convert Google Gemini's web interface into an OpenAI-compatible API with zero cost, tool calling, and full model support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
