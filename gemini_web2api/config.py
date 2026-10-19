@@ -2,6 +2,16 @@
 import json
 import os
 
+def sanitize_proxy(raw_proxy: str) -> str:
+    """Sanitize proxy string, returning None if malformed or containing curl syntax."""
+    if not raw_proxy or not isinstance(raw_proxy, str):
+        return None
+    cleaned = raw_proxy.strip().strip("'\"")
+    if cleaned.startswith("curl") or " " in cleaned or "http" not in cleaned.lower():
+        return None
+    return cleaned
+
+
 DEFAULT_CONFIG = {
     "port": 8081,
     "host": "0.0.0.0",
@@ -14,8 +24,8 @@ DEFAULT_CONFIG = {
     "default_model": "gemini-3.6-flash",
     "log_requests": True,
     "cookie_file": None,
-    "proxy": os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or None,
-    "relay_url": os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or "https://square-union-5810.shivsingh9555564990.workers.dev",
+    "proxy": sanitize_proxy(os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")),
+    "relay_url": os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or None,
     "api_keys": [],
     "temporary_chats": False,
 }
@@ -28,9 +38,8 @@ def load_config(path: str = None):
     if path and os.path.exists(path):
         with open(path) as f:
             CONFIG.update(json.load(f))
-    # Ensure relay_url always defaults to Cloudflare worker
     if not CONFIG.get("relay_url"):
-        CONFIG["relay_url"] = os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or "https://square-union-5810.shivsingh9555564990.workers.dev"
+        CONFIG["relay_url"] = os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or None
     return CONFIG
 
 

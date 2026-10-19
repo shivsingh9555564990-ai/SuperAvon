@@ -156,20 +156,24 @@ def _build_payload(prompt: str, model_id: int, think_mode: int, file_refs: list 
 
 
 def _base_url() -> str:
-    relay = CONFIG.get("relay_url") or os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or "https://square-union-5810.shivsingh9555564990.workers.dev"
+    relay = CONFIG.get("relay_url") or os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL")
     if relay and str(relay).strip():
         return str(relay).strip().rstrip("/")
-    return "https://square-union-5810.shivsingh9555564990.workers.dev"
+    return "https://gemini.google.com"
 
 
-def _get_url() -> str:
+def _get_url_for_base(base_url: str) -> str:
     reqid = int(time.time()) % 1000000
     account_prefix = _account_prefix()
     return (
-        f"{_base_url()}{account_prefix}/_/BardChatUi/data/"
+        f"{base_url}{account_prefix}/_/BardChatUi/data/"
         "assistant.lamda.BardFrontendService/StreamGenerate"
         f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
     )
+
+
+def _get_url() -> str:
+    return _get_url_for_base(_base_url())
 
 
 def clean_text(text: str, strip: bool = True) -> str:
@@ -222,30 +226,38 @@ def extract_response_text(raw: str) -> str:
 def generate(prompt: str, model_id: int, think_mode: int, file_refs: list = None, extra_fields: dict = None) -> str:
     """Non-streaming generation with retry."""
     body = _build_payload(prompt, model_id, think_mode, file_refs, extra_fields).encode()
-    url = _get_url()
     headers = _build_headers()
     ctx = _get_ssl_ctx()
     proxy = CONFIG.get("proxy")
 
+    base_urls = [_base_url()]
+    if base_urls[0] != "https://gemini.google.com":
+        base_urls.append("https://gemini.google.com")
+
     last_err = None
-    for attempt in range(CONFIG["retry_attempts"]):
-        try:
-            req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-            if proxy:
-                opener = urllib.request.build_opener(
-                    urllib.request.ProxyHandler({"http": proxy, "https": proxy}),
-                    urllib.request.HTTPSHandler(context=ctx)
-                )
-                resp = opener.open(req, timeout=CONFIG["request_timeout_sec"])
-            else:
-                resp = urllib.request.urlopen(req, context=ctx, timeout=CONFIG["request_timeout_sec"])
-            raw = resp.read().decode("utf-8", errors="replace")
-            return extract_response_text(raw)
-        except Exception as e:
-            last_err = e
-            if attempt < CONFIG["retry_attempts"] - 1:
-                log(f"Retry {attempt+1}/{CONFIG['retry_attempts']}: {e}")
-                time.sleep(CONFIG["retry_delay_sec"])
+    for current_base in base_urls:
+        url = _get_url_for_base(current_base)
+        for attempt in range(CONFIG["retry_attempts"]):
+            try:
+                req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+                if proxy:
+                    opener = urllib.request.build_opener(
+                        urllib.request.ProxyHandler({"http": proxy, "https": proxy}),
+                        urllib.request.HTTPSHandler(context=ctx)
+                    )
+                    resp = opener.open(req, timeout=CONFIG["request_timeout_sec"])
+                else:
+                    resp = urllib.request.urlopen(req, context=ctx, timeout=CONFIG["request_timeout_sec"])
+                raw = resp.read().decode("utf-8", errors="replace")
+                return extract_response_text(raw)
+            except Exception as e:
+                last_err = e
+                if attempt < CONFIG["retry_attempts"] - 1:
+                    log(f"Retry {attempt+1}/{CONFIG['retry_attempts']} on {current_base}: {e}")
+                    time.sleep(CONFIG["retry_delay_sec"])
+                elif current_base != "https://gemini.google.com":
+                    log(f"Relay {current_base} failed: {e}. Falling back to direct connection...")
+                    break
     raise last_err
 
 
@@ -258,13 +270,17 @@ def generate_stream(prompt: str, model_id: int, think_mode: int, file_refs: list
         return
 
     body = _build_payload(prompt, model_id, think_mode, file_refs, extra_fields)
-    url = _get_url()
     headers = _build_headers()
     client = _get_httpx_client()
 
+    base_urls = [_base_url()]
+    if base_urls[0] != "https://gemini.google.com":
+        base_urls.append("https://gemini.google.com")
+
     last_err = None
-    emitted_raw_text = ""
-    for attempt in range(CONFIG["retry_attempts"]):
+    for current_base in base_urls:
+        url = _get_url_for_base(current_base)
+        emitted_raw_text = ""
         try:
             with client.stream("POST", url, content=body, headers=headers) as resp:
                 resp.raise_for_status()
@@ -291,7 +307,8 @@ def generate_stream(prompt: str, model_id: int, think_mode: int, file_refs: list
             return
         except Exception as e:
             last_err = e
-            if attempt < CONFIG["retry_attempts"] - 1:
-                log(f"Stream retry {attempt+1}/{CONFIG['retry_attempts']}: {e}")
-                time.sleep(CONFIG["retry_delay_sec"])
-    raise last_err
+            log(f"Streaming failed on {current_base}: {e}")
+            if current_base != "https://gemini.google.com":
+                log(f"Falling back from {current_base} to direct https://gemini.google.com...")
+                continue
+            raise last_err
