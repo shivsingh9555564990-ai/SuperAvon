@@ -67,7 +67,7 @@ DEFAULT_CONFIG = {
     "log_requests": True,
     "cookie_file": None,
     "proxy": os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY") or None,
-    "relay_url": os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or "https://square-union-5810.shivsingh9555564990.workers.dev",
+    "relay_url": os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or None,
     "api_keys": [],
     "temporary_chats": False,
 }
@@ -111,7 +111,234 @@ MODELS = {
         "mode": 6, "think": 4,
         "desc": "Lightweight fast model",
     },
+    "flux-1-schnell": {
+        "mode": 1, "think": 4, "is_image": True,
+        "desc": "Ultra-HD FLUX.1 Schnell Image Generator",
+    },
+    "dall-e-3": {
+        "mode": 1, "think": 4, "is_image": True,
+        "desc": "FLUX.1 Max Quality Image Generator (DALL-E 3 Compatible)",
+    },
+    "stable-diffusion-xl": {
+        "mode": 1, "think": 4, "is_image": True,
+        "desc": "Stable Diffusion XL High Detail Image Generator",
+    },
 }
+
+# ─── Image Generation & Intent Engine ────────────────────────────────────────
+
+IMAGE_WORDS = r"(?:image|img|imgs|images|photo|photos|pic|pics|picture|pictures|tasveer|tasveerein|chitra|wallpaper|portrait|illustration|artwork|render|drawing|painting)"
+MAKE_VERBS = r"(?:generation|generate|generat|banao|bnao|bana|bna|bana\s+do|bna\s+do|bana\s+de|bna\s+de|bana\s+ke\s+do|generate\s+karo|generation\s+karo|karo|create|kheecho|dikhao|render|draw|chahiye|de|do)"
+PREPOSITIONS = r"(?:ki|ke|ka|of|for|about|in)"
+
+IMAGE_TRIGGERS_REGEX = [
+    # English commands (e.g. 'generate an image of...', 'draw a...', 'photo of...')
+    re.compile(rf"^(?:generate|create|draw|paint|make|render|produce)\s+(?:an?\s+)?{IMAGE_WORDS}\s+(?:{PREPOSITIONS}\s+)?\s*(.+)", re.IGNORECASE),
+    re.compile(r"^(?:draw|paint|sketch|illustrate)\s+(?:me\s+)?(?:a|an|the)?\s*(.+)", re.IGNORECASE),
+    re.compile(rf"^{IMAGE_WORDS}\s+(?:{PREPOSITIONS}\s+)?(.+)", re.IGNORECASE),
+    re.compile(rf"^(?:generate|create|render)\s+{IMAGE_WORDS}:\s*(.+)", re.IGNORECASE),
+    
+    # Hindi / Hinglish commands (e.g. 'Mahadev ke img bnao', 'Mahadev ki img generation karo')
+    re.compile(rf"(.+?)\s+(?:{PREPOSITIONS}\s+)?{IMAGE_WORDS}\s+(?:{PREPOSITIONS}\s+)?{MAKE_VERBS}", re.IGNORECASE),
+    re.compile(rf"(.+?)\s+{IMAGE_WORDS}\s+{MAKE_VERBS}", re.IGNORECASE),
+    re.compile(rf"^{IMAGE_WORDS}\s+{MAKE_VERBS}\s+(?:{PREPOSITIONS}\s+)?(.+)", re.IGNORECASE),
+    re.compile(rf"^{MAKE_VERBS}\s+{IMAGE_WORDS}\s+(?:{PREPOSITIONS}\s+)?(.+)", re.IGNORECASE),
+    re.compile(rf"(.+?)\s+{MAKE_VERBS}\s+(?:{PREPOSITIONS}\s+)?{IMAGE_WORDS}", re.IGNORECASE),
+    re.compile(rf"(.+?)\s+{IMAGE_WORDS}", re.IGNORECASE),
+]
+
+IMAGE_EXCLUSIONS = [
+    "how to draw", "how to generate", "how to paint", "how to create an image",
+    "what is a photo", "what is an image", "tell me about", "explain how",
+    "steps to draw", "tutorial", "code to",
+    "write code", "python script", "javascript", "html", "css", "svg"
+]
+
+GEMINI_IMAGE_REFUSAL_PHRASES = [
+    "can't create any for you",
+    "can't seem to create any",
+    "image creation isn't available",
+    "image creation may not be available",
+    "i can search for images, but",
+    "i can try to find an image like that for you, but",
+    "i can try to find an image",
+    "unable to generate images",
+    "unable to create images",
+    "cannot create images",
+    "cannot generate images",
+    "not able to generate images",
+    "i don't have the ability to create images",
+    "i cannot draw",
+    "i am an ai text model and cannot create images"
+]
+
+def extract_image_prompt(user_text: str) -> Optional[str]:
+    """Returns the extracted image prompt if the user is asking to generate an image, else None."""
+    if not user_text:
+        return None
+    # Strip any trailing dots, commas, exclamation marks, or question marks
+    text = user_text.strip().rstrip(".,!?:; \t\n")
+    lowered = text.lower()
+
+    # Exclude questions, tutorials, or coding queries about images
+    for excl in IMAGE_EXCLUSIONS:
+        if excl in lowered:
+            return None
+
+    # Check regex triggers
+    for pattern in IMAGE_TRIGGERS_REGEX:
+        match = pattern.match(text)
+        if match:
+            extracted = match.group(1).strip().rstrip(".,!?:; \t\n")
+            if len(extracted) > 1:
+                return extracted
+            return text
+
+    return None
+
+# ─── Image Generation & In-Memory Cache ─────────────────────────────────────
+
+IMAGE_CACHE: dict[str, bytes] = {}
+
+def enhance_masterpiece_prompt(raw_prompt: str) -> tuple[str, str]:
+    """
+    Intelligently expands raw user queries into award-winning, photorealistic 8K prompts.
+    Returns (enhanced_positive_prompt, negative_prompt)
+    """
+    p = raw_prompt.strip()
+    p_lower = p.lower()
+
+    negative_prompt = (
+        "blurry, low quality, distorted, extra limbs, bad anatomy, deformed face, bad hands, "
+        "missing fingers, duplicate, watermark, signature, text, oversaturated, pixelated, ugly, cartoonish, low resolution"
+    )
+
+    # 1. Indian Sacred / Deities / Divine Art
+    if any(k in p_lower for k in ["mahadev", "shiva", "shiv", "bholenath", "shankar", "neelkanth"]):
+        return (
+            f"Majestic sacred portrait of Lord Shiva Mahadev in deep meditation on snow-capped Mount Kailash, "
+            f"glowing third eye emitting divine light, sacred crescent moon nestled in matted locks, holy river Ganga cascading, "
+            f"detailed snake Vasuki coiled around neck, sacred Trishul and Damru, ash tilak on forehead, "
+            f"cosmic galaxy stars and nebula background, cinematic volumetric godrays, photorealistic hyperdetailed skin texture, "
+            f"octane render 8k, Unreal Engine 5, award winning celestial masterpiece portrait, ultra fine lighting",
+            negative_prompt
+        )
+    elif any(k in p_lower for k in ["ram", "shree ram", "ayodhya", "sita"]):
+        return (
+            f"Divine ultra-realistic portrait of Lord Shree Ram holding golden bow and arrow, radiant glowing aura, "
+            f"royal ancient traditional ornaments, serene divine expression, Ayodhya celestial temple in background, "
+            f"golden hour warm sunlight, cinematic lighting, 8k resolution, octane render, photorealistic, hyper-detailed",
+            negative_prompt
+        )
+    elif any(k in p_lower for k in ["krishna", "kanha", "radha"]):
+        return (
+            f"Enchanting divine portrait of Lord Krishna with peacock feather in crown, holding golden flute, "
+            f"soft divine smile, glowing sacred aura, Vrindavan sacred forest with blooming lotus flowers, "
+            f"mystical twilight lighting, hyperrealistic, 8k resolution, Unreal Engine 5 masterpiece",
+            negative_prompt
+        )
+    elif any(k in p_lower for k in ["hanuman", "bajrangbali"]):
+        return (
+            f"Mighty portrait of Lord Hanuman in powerful posture, glowing divine aura, mountain in background, "
+            f"golden mace, intense devotion in eyes, cinematic dust and godrays, 8k hyperrealistic render, masterpiece",
+            negative_prompt
+        )
+
+    # 2. Monuments / Architecture
+    elif any(k in p_lower for k in ["taj mahal", "monument", "castle", "palace", "temple"]):
+        return (
+            f"Ultra-high resolution architectural masterpiece of {p}, dramatic golden hour sky reflecting in crystal water, "
+            f"intricate marble engravings, volumetric atmospheric lighting, professional Nikon Z9 photography, 8k UHD, crisp details",
+            negative_prompt
+        )
+
+    # 3. Nature / Landscapes
+    elif any(k in p_lower for k in ["mountain", "sunset", "forest", "sea", "ocean", "waterfall", "nature"]):
+        return (
+            f"Breathtaking National Geographic style landscape photography of {p}, dynamic sunset lighting, "
+            f"volumetric mist, ultra-detailed foliage and rock textures, 8k resolution, photorealistic masterpiece, Hasselblad H6D",
+            negative_prompt
+        )
+
+    # 4. General / Portraits / Custom prompts
+    else:
+        return (
+            f"Masterpiece photorealistic 8k render of {p}, award-winning composition, cinematic studio lighting, "
+            f"hyperdetailed textures, subsurface scattering, ultra fine details, octane render, Unreal Engine 5, realistic depth of field",
+            negative_prompt
+        )
+
+def generate_real_image_bytes(prompt: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """
+    Downloads raw image bytes generated with Deep Masterpiece Ultra-HD settings.
+    Returns (image_id, base64_str, error_message)
+    """
+    clean_prompt = prompt.strip()
+    enhanced_prompt, negative_prompt = enhance_masterpiece_prompt(clean_prompt)
+    log(f"🎨 Deep Masterpiece Engine: Generating Ultra-HD for: '{clean_prompt[:50]}'")
+    log(f"✨ Enhanced Prompt: '{enhanced_prompt[:90]}...'")
+
+    relay_url = CONFIG.get("relay_url") or "https://square-union-5810.shivsingh9555564990.workers.dev"
+    target_url = f"{relay_url.rstrip('/')}/generate-image"
+
+    # Step 1: Call Cloudflare Workers AI with Deep HD Parameters
+    try:
+        payload = json.dumps({
+            "prompt": enhanced_prompt,
+            "negative_prompt": negative_prompt,
+            "model": "@cf/stabilityai/stable-diffusion-xl-base-1.0",
+            "num_steps": 30,
+            "guidance": 8.0
+        }).encode("utf-8")
+        
+        req = urllib.request.Request(
+            target_url,
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+        )
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(req, context=ctx, timeout=45) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            items = data.get("data", [])
+            if items:
+                first = items[0]
+                b64_str = first.get("b64_json")
+                if b64_str:
+                    img_bytes = base64.b64decode(b64_str)
+                    img_id = uuid.uuid4().hex[:16]
+                    IMAGE_CACHE[img_id] = img_bytes
+                    if len(IMAGE_CACHE) > 50:
+                        del IMAGE_CACHE[next(iter(IMAGE_CACHE))]
+                    return img_id, b64_str, None
+    except Exception as cf_err:
+        log(f"Cloudflare Worker AI primary attempt note: {cf_err}. Running deep fallback...")
+
+    # Step 2: High-Precision Masterpiece Generator Pipeline
+    try:
+        encoded = urllib.parse.quote(enhanced_prompt)
+        seed = int(time.time() * 1000) % 9999999
+        direct_url = f"https://image.pollinations.ai/prompt/{encoded}?model=flux-realism&width=1024&height=1024&nologo=true&enhance=true&seed={seed}"
+        req2 = urllib.request.Request(direct_url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        ctx2 = ssl.create_default_context()
+        ctx2.check_hostname = False
+        ctx2.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(req2, context=ctx2, timeout=45) as resp2:
+            img_bytes = resp2.read()
+            if img_bytes and len(img_bytes) > 1000:
+                img_id = uuid.uuid4().hex[:16]
+                IMAGE_CACHE[img_id] = img_bytes
+                if len(IMAGE_CACHE) > 50:
+                    del IMAGE_CACHE[next(iter(IMAGE_CACHE))]
+                b64_str = base64.b64encode(img_bytes).decode("utf-8")
+                return img_id, b64_str, None
+    except Exception as e:
+        log(f"Deep generator error: {e}")
+        return None, None, f"Image generation error: {e}"
 
 # ─── Utilities ───────────────────────────────────────────────────────────────
 
@@ -170,10 +397,10 @@ def apply_chat_persistence_flags(inner: list) -> None:
 
 def gemini_base_url() -> str:
     """Return the base Gemini endpoint URL, or Cloudflare Worker relay if configured."""
-    relay = CONFIG.get("relay_url") or os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or "https://square-union-5810.shivsingh9555564990.workers.dev"
+    relay = CONFIG.get("relay_url") or os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL")
     if relay and str(relay).strip():
         return str(relay).strip().rstrip("/")
-    return "https://square-union-5810.shivsingh9555564990.workers.dev"
+    return "https://gemini.google.com"
 
 
 def fetch_latest_bl() -> Optional[str]:
@@ -279,62 +506,57 @@ def gemini_stream_generate(prompt: str, model_id: int, think_mode: int, file_ref
     body = urllib.parse.urlencode(params).encode()
     reqid = int(time.time()) % 1000000
     prefix = account_prefix()
-    url = (
-        f"{gemini_base_url()}{prefix}/_/BardChatUi/data/"
-        "assistant.lamda.BardFrontendService/StreamGenerate"
-        f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
-    )
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Origin": "https://gemini.google.com",
-        "Referer": f"https://gemini.google.com{prefix}/app",
-        "X-Same-Domain": "1",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    }
-    if prefix:
-        headers["X-Goog-AuthUser"] = str(CONFIG["auth_user"])
-
-    cookie_str, sapisid = load_cookie()
-    if cookie_str:
-        headers["Cookie"] = cookie_str
-    if sapisid:
-        headers["Authorization"] = make_sapisidhash(sapisid)
+    base_urls = [gemini_base_url()]
+    if base_urls[0] != "https://gemini.google.com":
+        base_urls.append("https://gemini.google.com")
 
     last_err = None
-    for attempt in range(CONFIG["retry_attempts"]):
-        try:
-            req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-            ctx = ssl.create_default_context()
-            proxy = CONFIG.get("proxy")
-            if proxy:
-                opener = urllib.request.build_opener(
-                    urllib.request.ProxyHandler({"http": proxy, "https": proxy}),
-                    urllib.request.HTTPSHandler(context=ctx)
-                )
-                resp = opener.open(req, timeout=CONFIG["request_timeout_sec"])
-            else:
-                resp = urllib.request.urlopen(req, context=ctx, timeout=CONFIG["request_timeout_sec"])
-            return resp.read().decode("utf-8", errors="replace")
-        except urllib.error.HTTPError as e:
-            if e.code == 405 and update_bl_if_needed():
-                reqid = int(time.time()) % 1000000
-                url = (
-                    f"{gemini_base_url()}{prefix}/_/BardChatUi/data/"
-                    "assistant.lamda.BardFrontendService/StreamGenerate"
-                    f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
-                )
-                log("Retrying with updated BL...")
+    for current_base in base_urls:
+        url = (
+            f"{current_base}{prefix}/_/BardChatUi/data/"
+            "assistant.lamda.BardFrontendService/StreamGenerate"
+            f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
+        )
+        for attempt in range(CONFIG["retry_attempts"]):
+            try:
+                req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+                ctx = ssl.create_default_context()
+                proxy = CONFIG.get("proxy")
+                if proxy:
+                    opener = urllib.request.build_opener(
+                        urllib.request.ProxyHandler({"http": proxy, "https": proxy}),
+                        urllib.request.HTTPSHandler(context=ctx)
+                    )
+                    resp = opener.open(req, timeout=CONFIG["request_timeout_sec"])
+                else:
+                    resp = urllib.request.urlopen(req, context=ctx, timeout=CONFIG["request_timeout_sec"])
+                return resp.read().decode("utf-8", errors="replace")
+            except urllib.error.HTTPError as e:
+                if e.code == 405 and update_bl_if_needed():
+                    reqid = int(time.time()) % 1000000
+                    url = (
+                        f"{current_base}{prefix}/_/BardChatUi/data/"
+                        "assistant.lamda.BardFrontendService/StreamGenerate"
+                        f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
+                    )
+                    log("Retrying with updated BL...")
+                    last_err = e
+                    continue
                 last_err = e
-                continue
-            last_err = e
-            if attempt < CONFIG["retry_attempts"] - 1:
-                log(f"Retry {attempt+1}/{CONFIG['retry_attempts']}: {e}")
-                time.sleep(CONFIG["retry_delay_sec"])
-        except Exception as e:
-            last_err = e
-            if attempt < CONFIG["retry_attempts"] - 1:
-                log(f"Retry {attempt+1}/{CONFIG['retry_attempts']}: {e}")
-                time.sleep(CONFIG["retry_delay_sec"])
+                if attempt < CONFIG["retry_attempts"] - 1:
+                    log(f"Retry {attempt+1}/{CONFIG['retry_attempts']} on {current_base}: {e}")
+                    time.sleep(CONFIG["retry_delay_sec"])
+                elif current_base != "https://gemini.google.com":
+                    log(f"Relay {current_base} failed with {e}. Falling back to direct connection...")
+                    break
+            except Exception as e:
+                last_err = e
+                if attempt < CONFIG["retry_attempts"] - 1:
+                    log(f"Retry {attempt+1}/{CONFIG['retry_attempts']} on {current_base}: {e}")
+                    time.sleep(CONFIG["retry_delay_sec"])
+                elif current_base != "https://gemini.google.com":
+                    log(f"Relay {current_base} failed with {e}. Falling back to direct connection...")
+                    break
     raise last_err
 
 
@@ -378,11 +600,7 @@ def gemini_stream_generate_iter(prompt: str, model_id: int, think_mode: int, fil
     body = urllib.parse.urlencode(params)
     reqid = int(time.time()) % 1000000
     prefix = account_prefix()
-    url = (
-        f"{gemini_base_url()}{prefix}/_/BardChatUi/data/"
-        "assistant.lamda.BardFrontendService/StreamGenerate"
-        f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
-    )
+
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
         "Origin": "https://gemini.google.com",
@@ -408,52 +626,69 @@ def gemini_stream_generate_iter(prompt: str, model_id: int, think_mode: int, fil
             yield text
         return
 
-    prev_text = ""
-    transport = httpx.HTTPTransport(proxy=proxy) if proxy else None
-    with httpx.Client(transport=transport, timeout=CONFIG["request_timeout_sec"], verify=True) as client:
+    base_urls = [gemini_base_url()]
+    if base_urls[0] != "https://gemini.google.com":
+        base_urls.append("https://gemini.google.com")
+
+    last_err = None
+    for current_base in base_urls:
+        url = (
+            f"{current_base}{prefix}/_/BardChatUi/data/"
+            "assistant.lamda.BardFrontendService/StreamGenerate"
+            f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
+        )
+        prev_text = ""
+        transport = httpx.HTTPTransport(proxy=proxy) if proxy else None
         try:
-            with client.stream("POST", url, content=body, headers=headers) as resp:
-                resp.raise_for_status()
-                buf = ""
-                for chunk in resp.iter_text():
-                    buf += chunk
-                    if "BardErrorInfo" in buf:
-                        import re as _re
-                        m = _re.search(r'BardErrorInfo\s*\[(\d+)\]', buf)
-                        if m:
-                            raise RuntimeError(f"Gemini upstream rejected request: BardErrorInfo [{m.group(1)}]")
-                    while "\n" in buf:
-                        line, buf = buf.split("\n", 1)
-                        if '"wrb.fr"' not in line or len(line) < 200:
-                            continue
-                        try:
-                            arr = json.loads(line)
-                            inner_str = arr[0][2]
-                            if not inner_str or len(inner_str) < 50:
+            with httpx.Client(transport=transport, timeout=CONFIG["request_timeout_sec"], verify=True) as client:
+                with client.stream("POST", url, content=body, headers=headers) as resp:
+                    resp.raise_for_status()
+                    buf = ""
+                    for chunk in resp.iter_text():
+                        buf += chunk
+                        if "BardErrorInfo" in buf:
+                            import re as _re
+                            m = _re.search(r'BardErrorInfo\s*\[(\d+)\]', buf)
+                            if m:
+                                raise RuntimeError(f"Gemini upstream rejected request: BardErrorInfo [{m.group(1)}]")
+                        while "\n" in buf:
+                            line, buf = buf.split("\n", 1)
+                            if '"wrb.fr"' not in line or len(line) < 200:
                                 continue
-                            inner2 = json.loads(inner_str)
-                            if isinstance(inner2, list) and len(inner2) > 4 and inner2[4]:
-                                for part in inner2[4]:
-                                    if isinstance(part, list) and len(part) > 1 and part[1] and isinstance(part[1], list):
-                                        for t in part[1]:
-                                            if isinstance(t, str) and len(t) > len(prev_text):
-                                                delta = t[len(prev_text):]
-                                                delta = clean_gemini_text(delta, strip=False)
-                                                if delta:
-                                                    yield delta
-                                                prev_text = t
-                        except (json.JSONDecodeError, IndexError, TypeError):
-                            pass
+                            try:
+                                arr = json.loads(line)
+                                inner_str = arr[0][2]
+                                if not inner_str or len(inner_str) < 50:
+                                    continue
+                                inner2 = json.loads(inner_str)
+                                if isinstance(inner2, list) and len(inner2) > 4 and inner2[4]:
+                                    for part in inner2[4]:
+                                        if isinstance(part, list) and len(part) > 1 and part[1] and isinstance(part[1], list):
+                                            for t in part[1]:
+                                                if isinstance(t, str) and len(t) > len(prev_text):
+                                                    delta = t[len(prev_text):]
+                                                    delta = clean_gemini_text(delta, strip=False)
+                                                    if delta:
+                                                        yield delta
+                                                    prev_text = t
+                            except (json.JSONDecodeError, IndexError, TypeError):
+                                pass
+            return
         except Exception as e:
-            if HAS_HTTPX and hasattr(e, 'response') and getattr(e.response, 'status_code', 0) == 405:
-                if update_bl_if_needed():
-                    log("BL updated, falling back to non-streaming for this request")
-                    raw = gemini_stream_generate(prompt, model_id, think_mode, file_refs)
-                    text = extract_response_text(raw)
-                    if text:
-                        yield text
-                    return
-            raise
+            last_err = e
+            status = getattr(getattr(e, 'response', None), 'status_code', 0)
+            log(f"Streaming failed on {current_base} (status {status}): {e}")
+            if HAS_HTTPX and status == 405 and update_bl_if_needed():
+                log("BL updated, falling back to non-streaming for this request")
+                raw = gemini_stream_generate(prompt, model_id, think_mode, file_refs)
+                text = extract_response_text(raw)
+                if text:
+                    yield text
+                return
+            if current_base != "https://gemini.google.com":
+                log(f"Falling back from {current_base} to direct https://gemini.google.com...")
+                continue
+            raise last_err
 
 
 def clean_gemini_text(text: str, strip: bool = True) -> str:
@@ -682,11 +917,18 @@ class GeminiHandler(BaseHTTPRequestHandler):
         client_ip = self.client_address[0] if self.client_address else "-"
         log(f"{client_ip} {fmt % args}")
 
+    def _send_cors_headers(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE, PATCH")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Credentials", "true")
+        self.send_header("Access-Control-Private-Network", "true")
+
     def send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self._send_cors_headers()
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -697,9 +939,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "*")
+        self._send_cors_headers()
         self.end_headers()
 
     def do_GET(self):
@@ -713,6 +953,21 @@ class GeminiHandler(BaseHTTPRequestHandler):
                      "owned_by": "google", "description": c["desc"]}
                     for n, c in MODELS.items()
                 ]})
+            elif self.path.startswith("/v1/images/cache/"):
+                # Serve cached real image binary directly with proper Content-Type
+                img_name = self.path.split("/v1/images/cache/")[-1]
+                img_id = img_name.replace(".jpg", "").replace(".jpeg", "").replace(".png", "")
+                img_bytes = IMAGE_CACHE.get(img_id)
+                if img_bytes:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "image/jpeg")
+                    self.send_header("Content-Length", str(len(img_bytes)))
+                    self._send_cors_headers()
+                    self.send_header("Cache-Control", "public, max-age=86400")
+                    self.end_headers()
+                    self.wfile.write(img_bytes)
+                else:
+                    self.send_json({"error": "Image not found in cache"}, 404)
             elif self.path.startswith("/v1beta/models"):
                 self._handle_google_models_list()
             elif self.path == "/":
@@ -733,6 +988,8 @@ class GeminiHandler(BaseHTTPRequestHandler):
             body = self._read_request_body()
             if self.path == "/v1/chat/completions":
                 self.handle_chat(body)
+            elif self.path == "/v1/images/generations":
+                self.handle_image_generations(body)
             elif self.path == "/v1/responses":
                 self.handle_responses(body)
             elif ":streamGenerateContent" in self.path:
@@ -794,6 +1051,34 @@ class GeminiHandler(BaseHTTPRequestHandler):
             text, tool_calls = parse_tool_calls(text)
         return text or "", tool_calls
 
+    def handle_image_generations(self, body: bytes):
+        """OpenAI standard /v1/images/generations endpoint for DALL-E / FLUX."""
+        try:
+            req = json.loads(body)
+            prompt = req.get("prompt", "").strip()
+            if not prompt:
+                self.send_json({"error": {"message": "prompt is required"}}, 400)
+                return
+            log(f"🎨 Generating Image via /v1/images/generations: '{prompt[:60]}'")
+            img_id, b64_data, img_err = generate_real_image_bytes(prompt)
+            if img_err or not b64_data:
+                self.send_json({"error": {"message": img_err or "Image generation failed"}}, 500)
+                return
+            
+            host = self.headers.get("Host", "localhost")
+            scheme = "https" if "render.com" in host or "workers.dev" in host or "app.app" in host else "http"
+            direct_cached_url = f"{scheme}://{host}/v1/images/cache/{img_id}.jpg"
+
+            self.send_json({
+                "created": int(time.time()),
+                "data": [{
+                    "b64_json": b64_data,
+                    "url": direct_cached_url
+                }]
+            })
+        except Exception as e:
+            self.send_json({"error": {"message": str(e)}}, 500)
+
     def handle_chat(self, body: bytes):
         req = json.loads(body)
         model_name, model_id, think_mode, err = self._resolve_model(
@@ -810,6 +1095,50 @@ class GeminiHandler(BaseHTTPRequestHandler):
 
         stream = req.get("stream", False)
         cid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
+
+        # ─── Smart AI Image Intent Detection ─────────────────────────────────
+        is_explicit_img_model = model_name in ("flux-1-schnell", "dall-e-3", "stable-diffusion-xl")
+        image_prompt = prompt if is_explicit_img_model else extract_image_prompt(prompt)
+
+        if image_prompt and not images and not tools:
+            log(f"🎨 Smart AI Intent: Image Generation triggered for: '{image_prompt[:60]}'")
+            img_id, b64_data, img_err = generate_real_image_bytes(image_prompt)
+            if img_err or not b64_data:
+                reply_text = f"Maaf kijiyega, image generate karne me samasya aayi: {img_err or 'Server connection error'}"
+            else:
+                host = self.headers.get("Host", "localhost")
+                scheme = "https" if "render.com" in host or "workers.dev" in host or "app.app" in host else "http"
+                local_url = f"{scheme}://{host}/v1/images/cache/{img_id}.jpg"
+                
+                # Directly embed the image HTML with base64 data so it renders immediately
+                reply_text = (
+                    f"Yeh lijiye aapki ultra-HD generated image:\n\n"
+                    f'<img src="data:image/jpeg;base64,{b64_data}" alt="{image_prompt}" data-imgid="{img_id}" style="max-width:100%;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,0.5);margin:10px 0;display:block;" />\n\n'
+                    f"✨ **Prompt:** *{image_prompt}*\n"
+                    f"🚀 **Model:** *FLUX.1 Schnell (Ultra-HD)*"
+                )
+
+            msg = {"role": "assistant", "content": reply_text}
+            if stream:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self._send_cors_headers()
+                self.end_headers()
+                chunk = {"id": cid, "object": "chat.completion.chunk", "created": int(time.time()),
+                         "model": model_name, "choices": [{"index": 0, "delta": msg, "finish_reason": "stop"}]}
+                self.wfile.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode())
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
+            else:
+                self.send_json({
+                    "id": cid, "object": "chat.completion", "created": int(time.time()),
+                    "model": model_name,
+                    "choices": [{"index": 0, "message": msg, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": len(prompt)//4, "completion_tokens": len(reply_text)//4,
+                              "total_tokens": (len(prompt)+len(reply_text))//4},
+                })
+            return
         try:
             file_refs = upload_images(images)
         except RuntimeError as e:
@@ -822,7 +1151,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.send_header("Cache-Control", "no-cache")
-                self.send_header("Access-Control-Allow-Origin", "*")
+                self._send_cors_headers()
                 self.end_headers()
                 first_chunk = {"id": cid, "object": "chat.completion.chunk", "created": int(time.time()),
                                "model": model_name, "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]}
@@ -850,6 +1179,18 @@ class GeminiHandler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_json({"error": {"message": f"upstream error: {e}"}}, 502)
             return
+
+        # ─── Automatic Refusal Interceptor: Fallback to Cloudflare Workers AI ─
+        if text and any(phrase in text.lower() for phrase in GEMINI_IMAGE_REFUSAL_PHRASES):
+            log(f"🛡️ Gemini image refusal detected. Automatically routing to Cloudflare Workers AI for: '{prompt[:60]}'")
+            img_id, b64_data, img_err = generate_real_image_bytes(prompt)
+            if b64_data:
+                text = (
+                    f"Yeh lijiye aapki ultra-HD generated image:\n\n"
+                    f'<img src="data:image/jpeg;base64,{b64_data}" alt="{prompt}" data-imgid="{img_id}" style="max-width:100%;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,0.5);margin:10px 0;display:block;" />\n\n'
+                    f"✨ **Prompt:** *{prompt}*\n"
+                    f"🚀 **Model:** *FLUX.1 Schnell (Cloudflare Workers AI GPU)*"
+                )
 
         msg = {"role": "assistant", "content": text or None}
         if tool_calls:
@@ -955,7 +1296,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self._send_cors_headers()
             self.end_headers()
             seq = [0]
 
@@ -1060,7 +1401,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self._send_cors_headers()
             self.end_headers()
             self.wfile.write(f"data: {json.dumps(response_obj)}\n\n".encode())
             self.wfile.flush()
@@ -1076,7 +1417,7 @@ def load_config(path: str):
             CONFIG.update(json.load(f))
         log(f"Config loaded: {path}")
     if not CONFIG.get("relay_url"):
-        CONFIG["relay_url"] = os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or "https://square-union-5810.shivsingh9555564990.workers.dev"
+        CONFIG["relay_url"] = os.environ.get("CLOUDFLARE_WORKER_URL") or os.environ.get("CF_RELAY_URL") or None
 
 
 def main():

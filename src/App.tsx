@@ -15,6 +15,9 @@ import {
   Maximize2,
   Minimize2,
   Upload,
+  Globe,
+  Server,
+  Settings,
 } from 'lucide-react';
 import { FormattedAiResponse, cleanAiSymbols } from './FormattedAiResponse';
 
@@ -35,6 +38,8 @@ interface ServerModel {
 }
 
 export default function App() {
+  const [baseUrl, setBaseUrl] = useState<string>(() => localStorage.getItem('api_base_url') || 'https://superavon-1.onrender.com/v1');
+  const [showServerMenu, setShowServerMenu] = useState<boolean>(false);
   const [models, setModels] = useState<ServerModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('gemini-3.7-flash');
   const [isLoadingModels, setIsLoadingModels] = useState<boolean>(true);
@@ -51,7 +56,7 @@ export default function App() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Namaste! Gemini Multimodal Vision AI active hai. Aap text ke sath-sath image upload karke pooch sakte hain (jaise: photo analysis, math problem, object identification, handwriting reading). Screen maximize mode me set hai.',
+      content: 'Namaste! Gemini Multimodal Vision AI active hai. Aap text ke sath-sath image upload karke pooch sakte hain (jaise: photo analysis, math problem, object identification, handwriting reading). Direct Render Base URL (https://superavon-1.onrender.com/v1) active hai.',
       model: 'gemini-3.7-flash',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
@@ -64,11 +69,19 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Fetch models directly from Python script server via /v1/models
-  const fetchModels = async () => {
+  // Save base URL preference
+  const updateBaseUrl = (url: string) => {
+    setBaseUrl(url);
+    localStorage.setItem('api_base_url', url);
+    fetchModels(url);
+  };
+
+  // Fetch models directly from API server via /v1/models
+  const fetchModels = async (targetUrl = baseUrl) => {
     setIsLoadingModels(true);
     try {
-      const res = await fetch('/v1/models');
+      const cleanUrl = targetUrl.trim().replace(/\/+$/, '');
+      const res = await fetch(`${cleanUrl}/models`);
       const data = await res.json();
       if (data && Array.isArray(data.data) && data.data.length > 0) {
         setModels(data.data);
@@ -78,14 +91,15 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.error('Failed to fetch models from script server:', err);
+      console.error('Failed to fetch models from server:', err);
+      setIsOnline(false);
     } finally {
       setIsLoadingModels(false);
     }
   };
 
   useEffect(() => {
-    fetchModels();
+    fetchModels(baseUrl);
   }, []);
 
   const scrollToBottom = () => {
@@ -217,8 +231,9 @@ export default function App() {
         }
       }
 
-      // Real-time SSE streaming directly to Python script
-      const res = await fetch('/v1/chat/completions', {
+      // Real-time SSE streaming directly to configured API Base URL
+      const cleanUrl = baseUrl.trim().replace(/\/+$/, '');
+      const res = await fetch(`${cleanUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -456,8 +471,109 @@ export default function App() {
             </div>
           </div>
 
-          {/* Action buttons (Maximize/Minimize, Memory Toggle, Clear Chat) */}
+          {/* Action buttons (Server Switcher, Maximize/Minimize, Memory Toggle, Clear Chat) */}
           <div className="flex items-center space-x-1.5 shrink-0">
+            {/* API Base URL Server Selector */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowServerMenu(!showServerMenu)}
+                title="API Server URL Settings"
+                className={`p-2 rounded-full border transition-all flex items-center space-x-1 ${
+                  baseUrl.includes('onrender')
+                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                    : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                }`}
+              >
+                <Globe className="w-4 h-4" />
+              </button>
+
+              {showServerMenu && (
+                <div className="absolute right-0 mt-2 w-80 bg-neutral-800/95 backdrop-blur-xl border border-neutral-700/90 rounded-2xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between pb-2 border-b border-neutral-700/60 mb-2">
+                    <span className="text-xs font-semibold text-neutral-200 flex items-center space-x-1">
+                      <Server className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>API Base URL Target</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowServerMenu(false)}
+                      className="text-neutral-400 hover:text-white p-0.5 rounded-md hover:bg-neutral-700"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateBaseUrl('https://superavon-1.onrender.com/v1');
+                        setShowServerMenu(false);
+                      }}
+                      className={`w-full text-left p-2.5 rounded-xl border text-xs transition-all ${
+                        baseUrl.includes('superavon-1.onrender.com')
+                          ? 'bg-purple-600/30 border-purple-500 text-purple-200'
+                          : 'bg-neutral-900/60 border-neutral-750 text-neutral-300 hover:bg-neutral-700/50'
+                      }`}
+                    >
+                      <div className="font-semibold text-purple-300 flex items-center justify-between">
+                        <span>Render Deployment</span>
+                        {baseUrl.includes('superavon-1.onrender.com') && <Check className="w-3.5 h-3.5 text-purple-400" />}
+                      </div>
+                      <div className="font-mono text-[10px] text-neutral-400 truncate mt-0.5">
+                        https://superavon-1.onrender.com/v1
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        updateBaseUrl('/v1');
+                        setShowServerMenu(false);
+                      }}
+                      className={`w-full text-left p-2.5 rounded-xl border text-xs transition-all ${
+                        baseUrl === '/v1'
+                          ? 'bg-blue-600/30 border-blue-500 text-blue-200'
+                          : 'bg-neutral-900/60 border-neutral-750 text-neutral-300 hover:bg-neutral-700/50'
+                      }`}
+                    >
+                      <div className="font-semibold text-blue-300 flex items-center justify-between">
+                        <span>Local Proxy Server</span>
+                        {baseUrl === '/v1' && <Check className="w-3.5 h-3.5 text-blue-400" />}
+                      </div>
+                      <div className="font-mono text-[10px] text-neutral-400 truncate mt-0.5">
+                        /v1 (Local Python Gateway)
+                      </div>
+                    </button>
+
+                    <div className="pt-2 border-t border-neutral-700/50">
+                      <label className="text-[10px] text-neutral-400 font-medium block mb-1">Custom Base URL:</label>
+                      <div className="flex space-x-1.5">
+                        <input
+                          type="text"
+                          value={baseUrl}
+                          onChange={(e) => setBaseUrl(e.target.value)}
+                          placeholder="https://your-domain.com/v1"
+                          className="flex-1 bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-cyan-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateBaseUrl(baseUrl);
+                            setShowServerMenu(false);
+                          }}
+                          className="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-medium"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Memory Toggle Button */}
             <button
               type="button"

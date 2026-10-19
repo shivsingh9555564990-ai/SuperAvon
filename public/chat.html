@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini AI Chat Interface</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            gemini: {
+              50: '#f0f4f8',
+              500: '#1a73e8',
+              600: '#1557b0',
+              800: '#0d254c',
+              900: '#08172e'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <!-- FontAwesome & Marked for Markdown -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Highlight.js for Code Highlighting -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+
+    /* Markdown Styling */
+    .prose-custom p {
+      margin-bottom: 0.75rem;
+      line-height: 1.625;
+    }
+    .prose-custom p:last-child {
+      margin-bottom: 0;
+    }
+    .prose-custom img {
+      border-radius: 0.875rem;
+      border: 1px solid #334155;
+      margin: 0.75rem 0;
+      max-height: 480px;
+      width: auto;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      transition: transform 0.2s;
+    }
+    .prose-custom img:hover {
+      transform: scale(1.01);
+      cursor: pointer;
+    }
+    .prose-custom pre {
+      background: #090d16;
+      border: 1px solid #1e293b;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      margin: 0.75rem 0;
+      position: relative;
+      overflow-x: auto;
+    }
+    .prose-custom code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85em;
+    }
+    .prose-custom :not(pre) > code {
+      background: #1e293b;
+      color: #93c5fd;
+      padding: 0.2rem 0.4rem;
+      border-radius: 0.375rem;
+    }
+    .prose-custom ul {
+      list-style-type: disc;
+      padding-left: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .prose-custom ol {
+      list-style-type: decimal;
+      padding-left: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .prose-custom h1, .prose-custom h2, .prose-custom h3 {
+      font-weight: 700;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      color: #f8fafc;
+    }
+    .prose-custom h1 { font-size: 1.4rem; }
+    .prose-custom h2 { font-size: 1.2rem; }
+    .prose-custom h3 { font-size: 1.05rem; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen flex overflow-hidden font-sans selection:bg-blue-600 selection:text-white">
+
+  <!-- Mobile Sidebar Overlay -->
+  <div id="mobileOverlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/60 z-30 hidden lg:hidden backdrop-blur-sm transition-opacity"></div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-40 w-72 bg-slate-900 border-r border-slate-800 flex flex-col transition-transform duration-300 -translate-x-full lg:translate-x-0">
+    <!-- Top New Chat Button -->
+    <div class="p-4 border-b border-slate-800 flex items-center justify-between gap-2">
+      <button onclick="startNewChat()" class="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-sm py-2.5 px-4 rounded-xl shadow-lg shadow-blue-600/20 active:scale-95 transition">
+        <i class="fa-solid fa-plus text-xs"></i> New Chat
+      </button>
+      <button onclick="toggleSidebar()" class="lg:hidden p-2 text-slate-400 hover:text-white">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+    </div>
+
+    <!-- Conversations List -->
+    <div class="flex-1 overflow-y-auto p-3 space-y-1.5" id="chatHistoryList">
+      <div class="text-[11px] font-semibold text-slate-400 px-3 py-1 uppercase tracking-wider">Recent Chats</div>
+      <!-- Dynamic Chat Items -->
+    </div>
+
+    <!-- Sidebar Bottom Settings -->
+    <div class="p-3 border-t border-slate-800 space-y-2 bg-slate-900/60">
+      <button onclick="openSettingsModal()" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800/80 transition">
+        <i class="fa-solid fa-gear text-blue-400"></i> Settings & Server
+      </button>
+      <button onclick="clearAllChats()" class="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-rose-400 hover:bg-rose-500/10 transition">
+        <i class="fa-solid fa-trash-can"></i> Clear All History
+      </button>
+      <div class="px-3 pt-1 text-[11px] text-slate-500 flex items-center justify-between">
+        <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Cloudflare Active</span>
+        <span>v3.7 Flash</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Chat Section -->
+  <main class="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden relative">
+
+    <!-- Top App Bar -->
+    <header class="h-14 border-b border-slate-800 bg-slate-900/70 backdrop-blur px-4 flex items-center justify-between z-10">
+      <div class="flex items-center gap-3">
+        <button onclick="toggleSidebar()" class="lg:hidden p-2 -ml-1 text-slate-400 hover:text-white rounded-lg">
+          <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-blue-500/30 text-xs">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+          </div>
+          <div>
+            <h1 class="text-sm font-semibold text-white leading-tight">Gemini AI Assistant</h1>
+            <span class="text-[10px] text-emerald-400 font-medium">superavon-1.onrender.com</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Model Selector -->
+      <div class="flex items-center gap-2">
+        <select id="chatModel" onchange="changeModel(this.value)" class="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-xl px-3 py-1.5 font-medium outline-none focus:border-blue-500">
+          <option value="gemini-3.7-flash" selected>Gemini 3.7 Flash</option>
+          <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
+          <option value="gemini-3.5-flash-thinking">Gemini 3.5 Thinking</option>
+          <option value="gemini-auto">Auto Model</option>
+          <option value="gemini-flash-lite">Flash Lite</option>
+        </select>
+        <button onclick="openSettingsModal()" class="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition" title="Server Settings">
+          <i class="fa-solid fa-sliders text-sm"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Messages Container -->
+    <div id="messagesArea" class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 max-w-4xl w-full mx-auto">
+
+      <!-- Welcome Hero (shown when no messages) -->
+      <div id="welcomeHero" class="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 px-4">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white text-2xl shadow-xl shadow-blue-500/20">
+          <i class="fa-solid fa-sparkles"></i>
+        </div>
+        <div class="space-y-2 max-w-md">
+          <h2 class="text-xl sm:text-2xl font-bold text-white">How can I help you today?</h2>
+          <p class="text-xs sm:text-sm text-slate-400">Directly connected to your free unlimited Gemini Web2API cluster with Cloudflare anti-ban IP rotation.</p>
+        </div>
+
+        <!-- Suggestion Chips -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-lg text-left">
+          <button onclick="usePrompt('Explain how Cloudflare IP rotation works in simple words.')" class="bg-slate-900/90 border border-slate-800 hover:border-blue-500/60 p-3.5 rounded-xl text-xs text-slate-300 hover:text-white transition group flex items-start gap-3">
+            <i class="fa-solid fa-network-wired text-blue-400 mt-0.5"></i>
+            <div>
+              <div class="font-semibold text-white">Explain IP Rotation</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">How Cloudflare avoids rate limits</div>
+            </div>
+          </button>
+          <button onclick="usePrompt('Write a clean Python script to scrape a website using BeautifulSoup.')" class="bg-slate-900/90 border border-slate-800 hover:border-blue-500/60 p-3.5 rounded-xl text-xs text-slate-300 hover:text-white transition group flex items-start gap-3">
+            <i class="fa-solid fa-code text-indigo-400 mt-0.5"></i>
+            <div>
+              <div class="font-semibold text-white">Write Python Code</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">Create clean, modern scripts</div>
+            </div>
+          </button>
+          <button onclick="usePrompt('Give me a 5-step strategy to launch an AI startup.')" class="bg-slate-900/90 border border-slate-800 hover:border-blue-500/60 p-3.5 rounded-xl text-xs text-slate-300 hover:text-white transition group flex items-start gap-3">
+            <i class="fa-solid fa-lightbulb text-amber-400 mt-0.5"></i>
+            <div>
+              <div class="font-semibold text-white">Startup Strategy</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">Step-by-step roadmap</div>
+            </div>
+          </button>
+          <button onclick="usePrompt('Write a professional email asking for a meeting.')" class="bg-slate-900/90 border border-slate-800 hover:border-blue-500/60 p-3.5 rounded-xl text-xs text-slate-300 hover:text-white transition group flex items-start gap-3">
+            <i class="fa-solid fa-envelope text-emerald-400 mt-0.5"></i>
+            <div>
+              <div class="font-semibold text-white">Draft Email</div>
+              <div class="text-[11px] text-slate-400 mt-0.5">Professional communication</div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages will be injected here -->
+      <div id="messagesList" class="space-y-6"></div>
+
+      <!-- Thinking Indicator -->
+      <div id="thinkingIndicator" class="hidden flex items-start gap-3 max-w-3xl">
+        <div id="thinkingAvatar" class="w-8 h-8 rounded-lg bg-blue-600/30 border border-blue-500/40 text-blue-400 flex items-center justify-center shrink-0 text-xs">
+          <i id="thinkingIcon" class="fa-solid fa-brain fa-fade"></i>
+        </div>
+        <div class="bg-slate-900 border border-slate-800 px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-blue-400 animate-bounce"></span>
+          <span class="w-2 h-2 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.2s]"></span>
+          <span class="w-2 h-2 rounded-full bg-purple-400 animate-bounce [animation-delay:0.4s]"></span>
+          <span id="thinkingText" class="text-xs text-slate-300 ml-2 font-medium">AI thinking...</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Bottom Input Area -->
+    <div class="p-4 sm:p-6 bg-gradient-to-t from-slate-950 via-slate-950 to-transparent">
+      <div class="max-w-4xl mx-auto">
+        <form onsubmit="handleSend(event)" class="relative flex items-end bg-slate-900/90 border border-slate-800 focus-within:border-blue-500/80 rounded-2xl p-2 shadow-2xl backdrop-blur transition-all">
+          <textarea
+            id="chatInput"
+            rows="1"
+            placeholder="Type your message... (Shift + Enter for new line)"
+            onkeydown="handleKeyDown(event)"
+            oninput="autoResizeTextarea(this)"
+            class="flex-1 bg-transparent text-sm text-slate-100 placeholder-slate-500 px-3 py-2.5 max-h-36 resize-none outline-none leading-relaxed"
+          ></textarea>
+
+          <div class="flex items-center gap-1.5 pb-1 pr-1">
+            <button
+              type="submit"
+              id="sendBtn"
+              class="w-9 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white flex items-center justify-center shadow-lg shadow-blue-600/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <i class="fa-solid fa-arrow-up text-sm"></i>
+            </button>
+          </div>
+        </form>
+        <div class="text-[11px] text-slate-500 text-center mt-2">
+          Powered by Gemini Web2API &bull; Zero API Key Needed &bull; Shift + Enter for multiline
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/70 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-blue-400"></i> API Endpoint Settings
+        </h3>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-white">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block font-medium text-slate-300 mb-1.5">OpenAI Compatible Endpoint</label>
+          <input type="text" id="settingBaseUrl" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-100 font-mono outline-none focus:border-blue-500">
+          <p class="text-slate-500 mt-1">Default: https://superavon-1.onrender.com/v1</p>
+        </div>
+
+        <div>
+          <label class="block font-medium text-slate-300 mb-1.5">API Key (Optional)</label>
+          <input type="text" id="settingApiKey" placeholder="sk-gemini ya blank chhod dein" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-100 font-mono outline-none focus:border-blue-500">
+          <p class="text-slate-500 mt-1">Universal zero-auth enabled hai, koi bhi key chalegi.</p>
+        </div>
+
+        <div>
+          <label class="block font-medium text-slate-300 mb-1.5">System Prompt (Assistant Identity)</label>
+          <textarea id="settingSystemPrompt" rows="2" placeholder="You are a helpful, brilliant AI assistant..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-slate-100 outline-none focus:border-blue-500"></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+        <button onclick="closeSettingsModal()" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800 transition">Cancel</button>
+        <button onclick="saveSettings()" class="px-5 py-2 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/30 transition">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Configuration & State
+    let config = {
+      baseUrl: localStorage.getItem('gemini_api_url') || 'https://superavon-1.onrender.com/v1',
+      apiKey: localStorage.getItem('gemini_api_key') || 'sk-gemini',
+      model: localStorage.getItem('gemini_model') || 'gemini-3.7-flash',
+      systemPrompt: localStorage.getItem('gemini_sys_prompt') || 'You are a helpful, precise and intelligent AI assistant.'
+    };
+
+    let conversations = JSON.parse(localStorage.getItem('gemini_conversations') || '[]');
+    let currentChatId = null;
+    let isGenerating = false;
+
+    // Initialize App
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('chatModel').value = config.model;
+      loadConversations();
+      if (conversations.length > 0) {
+        selectChat(conversations[0].id);
+      } else {
+        startNewChat();
+      }
+    });
+
+    // Sidebar Toggle
+    function toggleSidebar() {
+      const sb = document.getElementById('sidebar');
+      const overlay = document.getElementById('mobileOverlay');
+      sb.classList.toggle('-translate-x-full');
+      overlay.classList.toggle('hidden');
+    }
+
+    // Auto resize textarea
+    function autoResizeTextarea(textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 140) + 'px';
+    }
+
+    function handleKeyDown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSend(e);
+      }
+    }
+
+    // Settings Modal
+    function openSettingsModal() {
+      document.getElementById('settingBaseUrl').value = config.baseUrl;
+      document.getElementById('settingApiKey').value = config.apiKey;
+      document.getElementById('settingSystemPrompt').value = config.systemPrompt;
+      document.getElementById('settingsModal').classList.remove('hidden');
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('settingsModal').classList.add('hidden');
+    }
+
+    function saveSettings() {
+      config.baseUrl = document.getElementById('settingBaseUrl').value.trim().replace(/\/+$/, '');
+      config.apiKey = document.getElementById('settingApiKey').value.trim();
+      config.systemPrompt = document.getElementById('settingSystemPrompt').value.trim();
+
+      localStorage.setItem('gemini_api_url', config.baseUrl);
+      localStorage.setItem('gemini_api_key', config.apiKey);
+      localStorage.setItem('gemini_sys_prompt', config.systemPrompt);
+
+      closeSettingsModal();
+    }
+
+    function changeModel(newModel) {
+      config.model = newModel;
+      localStorage.setItem('gemini_model', newModel);
+    }
+
+    // Chat History Management
+    function loadConversations() {
+      const list = document.getElementById('chatHistoryList');
+      list.innerHTML = '<div class="text-[11px] font-semibold text-slate-500 px-3 py-1 uppercase tracking-wider">Recent Chats</div>';
+
+      conversations.forEach(c => {
+        const item = document.createElement('div');
+        const isActive = c.id === currentChatId;
+        item.className = `group flex items-center justify-between px-3 py-2.5 rounded-xl text-xs cursor-pointer transition ${
+          isActive ? 'bg-blue-600/10 text-blue-400 font-medium border border-blue-500/20' : 'text-slate-300 hover:bg-slate-800/60'
+        }`;
+        item.onclick = () => selectChat(c.id);
+
+        item.innerHTML = `
+          <div class="flex items-center gap-2.5 truncate">
+            <i class="fa-regular fa-message ${isActive ? 'text-blue-400' : 'text-slate-500'}"></i>
+            <span class="truncate">${c.title || 'Untitled Chat'}</span>
+          </div>
+          <button onclick="deleteChat(event, '${c.id}')" class="opacity-0 group-hover:opacity-100 hover:text-rose-400 p-1 rounded transition">
+            <i class="fa-solid fa-xmark text-xs"></i>
+          </button>
+        `;
+        list.appendChild(item);
+      });
+    }
+
+    function startNewChat() {
+      currentChatId = 'chat_' + Date.now();
+      const newConv = {
+        id: currentChatId,
+        title: 'New Conversation',
+        messages: [],
+        timestamp: Date.now()
+      };
+      conversations.unshift(newConv);
+      saveConversations();
+      loadConversations();
+      renderMessages();
+      document.getElementById('chatInput').focus();
+    }
+
+    function selectChat(id) {
+      currentChatId = id;
+      loadConversations();
+      renderMessages();
+    }
+
+    function deleteChat(e, id) {
+      e.stopPropagation();
+      conversations = conversations.filter(c => c.id !== id);
+      saveConversations();
+      if (currentChatId === id) {
+        if (conversations.length > 0) {
+          selectChat(conversations[0].id);
+        } else {
+          startNewChat();
+        }
+      } else {
+        loadConversations();
+      }
+    }
+
+    function clearAllChats() {
+      if (confirm('Kya aap saari chat history delete karna chahte hain?')) {
+        conversations = [];
+        saveConversations();
+        startNewChat();
+      }
+    }
+
+    function saveConversations() {
+      localStorage.setItem('gemini_conversations', JSON.stringify(conversations));
+    }
+
+    function getCurrentChat() {
+      return conversations.find(c => c.id === currentChatId);
+    }
+
+    // Render Messages
+    function renderMessages() {
+      const chat = getCurrentChat();
+      const hero = document.getElementById('welcomeHero');
+      const list = document.getElementById('messagesList');
+      list.innerHTML = '';
+
+      if (!chat || chat.messages.length === 0) {
+        hero.classList.remove('hidden');
+        list.classList.add('hidden');
+        return;
+      }
+
+      hero.classList.add('hidden');
+      list.classList.remove('hidden');
+
+      chat.messages.forEach(msg => {
+        appendMessageUI(msg.role, msg.content, false);
+      });
+
+      scrollToBottom();
+    }
+
+    function usePrompt(text) {
+      document.getElementById('chatInput').value = text;
+      handleSend(new Event('submit'));
+    }
+
+    function openImageLightbox(src) {
+      const modal = document.getElementById('imageLightboxModal');
+      const img = document.getElementById('lightboxImg');
+      const downloadBtn = document.getElementById('lightboxDownloadBtn');
+      if (modal && img) {
+        img.src = src;
+        downloadBtn.href = src;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+    }
+
+    function closeImageLightbox() {
+      const modal = document.getElementById('imageLightboxModal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    function renderMarkdownContent(rawText) {
+      if (!rawText) return '';
+      // Parse markdown to HTML
+      let html = marked.parse(rawText);
+
+      // Enhance any img tags rendered with full-screen click & download capability
+      html = html.replace(/<img\s+([^>]*?)src="([^"]+)"([^>]*?)>/gi, (match, before, src, after) => {
+        return `
+          <div class="my-3 rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-2xl group relative inline-block max-w-full">
+            <img src="${src}" ${before} ${after} loading="lazy" class="w-full max-h-[460px] object-cover rounded-xl transition duration-300 group-hover:scale-[1.01] cursor-pointer" onclick="openImageLightbox('${src}')" />
+            <div class="absolute bottom-2.5 right-2.5 flex items-center gap-2 opacity-95 group-hover:opacity-100 transition">
+              <a href="${src}" download="ai_generated_art.jpg" target="_blank" class="bg-slate-900/90 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg border border-slate-700 backdrop-blur flex items-center gap-1.5 shadow-lg font-medium transition">
+                <i class="fa-solid fa-download"></i> Save HD
+              </a>
+              <button type="button" onclick="openImageLightbox('${src}')" class="bg-slate-900/90 hover:bg-slate-800 text-white text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 backdrop-blur shadow-lg">
+                <i class="fa-solid fa-expand"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      });
+      return html;
+    }
+
+    function appendMessageUI(role, content, shouldScroll = true) {
+      const list = document.getElementById('messagesList');
+      document.getElementById('welcomeHero').classList.add('hidden');
+      list.classList.remove('hidden');
+
+      const isUser = role === 'user';
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `flex items-start gap-3.5 max-w-4xl ${isUser ? 'justify-end' : 'justify-start'}`;
+
+      const avatar = isUser
+        ? `<div class="w-8 h-8 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center shrink-0 text-xs order-2 border border-slate-700"><i class="fa-solid fa-user"></i></div>`
+        : `<div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center shrink-0 text-xs shadow-md shadow-blue-500/20"><i class="fa-solid fa-sparkles"></i></div>`;
+
+      const formattedContent = isUser ? escapeHtml(content) : renderMarkdownContent(content);
+
+      const bubble = `
+        <div class="${isUser ? 'order-1' : ''} max-w-[85%] sm:max-w-[78%]">
+          <div class="px-4 py-3 rounded-2xl text-sm ${
+            isUser
+              ? 'bg-blue-600 text-white rounded-tr-sm shadow-md'
+              : 'bg-slate-900 text-slate-200 border border-slate-800 rounded-tl-sm prose-custom shadow-lg'
+          }">
+            ${formattedContent}
+          </div>
+          ${!isUser ? `
+            <div class="flex items-center gap-2 mt-1.5 ml-1 text-[11px] text-slate-500">
+              <button onclick="copyToClipboard(this)" data-content="${escapeHtml(content)}" class="hover:text-slate-300 flex items-center gap-1 transition">
+                <i class="fa-regular fa-copy"></i> Copy
+              </button>
+            </div>
+          ` : ''}
+        </div>
+      `;
+
+      msgDiv.innerHTML = isUser ? bubble + avatar : avatar + bubble;
+      list.appendChild(msgDiv);
+
+      // Highlight code blocks
+      msgDiv.querySelectorAll('pre code').forEach((block) => {
+        hljs.highlightElement(block);
+      });
+
+      if (shouldScroll) scrollToBottom();
+    }
+
+    function scrollToBottom() {
+      const area = document.getElementById('messagesArea');
+      area.scrollTop = area.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function copyToClipboard(btn) {
+      const content = btn.getAttribute('data-content');
+      navigator.clipboard.writeText(content).then(() => {
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i> Copied!';
+        setTimeout(() => { btn.innerHTML = orig; }, 2000);
+      });
+    }
+
+    // Send Message Handler
+    async function handleSend(e) {
+      if (e) e.preventDefault();
+      if (isGenerating) return;
+
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      input.value = '';
+      input.style.height = 'auto';
+
+      const chat = getCurrentChat();
+      if (!chat) return;
+
+      // Set chat title if first message
+      if (chat.messages.length === 0) {
+        chat.title = text.length > 28 ? text.slice(0, 25) + '...' : text;
+        loadConversations();
+      }
+
+      // Add user message
+      chat.messages.push({ role: 'user', content: text });
+      appendMessageUI('user', text);
+      saveConversations();
+
+      // UI Loading state
+      isGenerating = true;
+      document.getElementById('sendBtn').disabled = true;
+
+      // Smart Intent Indicator
+      const isImgIntent = /(?:image|img|photo|pic|picture|tasveer|wallpaper|drawing|painting|banao|bnao|generate)/i.test(text);
+      const thinkingText = document.getElementById('thinkingText');
+      const thinkingIcon = document.getElementById('thinkingIcon');
+      if (isImgIntent) {
+        if (thinkingText) thinkingText.innerHTML = '<span class="text-amber-300 font-semibold">🎨 Cloudflare AI se HD Image generate ho rahi hai...</span>';
+        if (thinkingIcon) thinkingIcon.className = 'fa-solid fa-wand-magic-sparkles fa-bounce text-amber-400';
+      } else {
+        if (thinkingText) thinkingText.innerHTML = 'AI thinking...';
+        if (thinkingIcon) thinkingIcon.className = 'fa-solid fa-brain fa-fade text-blue-400';
+      }
+
+      document.getElementById('thinkingIndicator').classList.remove('hidden');
+      scrollToBottom();
+
+      try {
+        const payloadMessages = [];
+        if (config.systemPrompt) {
+          payloadMessages.push({ role: 'system', content: config.systemPrompt });
+        }
+        // Send history for context
+        payloadMessages.push(...chat.messages.map(m => ({ role: m.role, content: m.content })));
+
+        const headers = { 'Content-Type': 'application/json' };
+        if (config.apiKey) headers['Authorization'] = 'Bearer ' + config.apiKey;
+
+        const response = await fetch(config.baseUrl + '/chat/completions', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            model: config.model,
+            messages: payloadMessages,
+            stream: false
+          })
+        });
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Server returned HTTP ${response.status}: ${errText}`);
+        }
+
+        const data = await response.json();
+        const aiReply = data?.choices?.[0]?.message?.content || 'No response generated.';
+
+        chat.messages.push({ role: 'assistant', content: aiReply });
+        appendMessageUI('assistant', aiReply);
+        saveConversations();
+
+      } catch (err) {
+        const errMsg = `⚠️ **Error connecting to AI:**\n${err.message}\n\n*Tip: Make sure https://superavon-1.onrender.com is running and accessible.*`;
+        chat.messages.push({ role: 'assistant', content: errMsg });
+        appendMessageUI('assistant', errMsg);
+        saveConversations();
+      } finally {
+        isGenerating = false;
+        document.getElementById('sendBtn').disabled = false;
+        document.getElementById('thinkingIndicator').classList.add('hidden');
+        scrollToBottom();
+      }
+    }
+  </script>
+
+  <!-- Image Zoom / Lightbox Modal -->
+  <div id="imageLightboxModal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md hidden items-center justify-center p-4 transition-all duration-300">
+    <div class="relative max-w-4xl w-full flex flex-col items-center">
+      <div class="absolute -top-12 right-0 flex items-center gap-3">
+        <a id="lightboxDownloadBtn" href="#" download="ai_artwork.jpg" class="bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg">
+          <i class="fa-solid fa-download"></i> Save HD
+        </a>
+        <button onclick="closeImageLightbox()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white w-8 h-8 rounded-xl flex items-center justify-center text-sm border border-slate-700 transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="rounded-2xl overflow-hidden border border-slate-700 shadow-2xl max-h-[80vh] flex items-center justify-center bg-slate-950">
+        <img id="lightboxImg" src="" alt="Zoomed HD Image" class="max-w-full max-h-[80vh] object-contain rounded-xl" />
+      </div>
+    </div>
+  </div>
+</body>
+</html>

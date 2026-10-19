@@ -19,6 +19,9 @@ export function extractYouTubeId(url: string): string | null {
 
 export function isImageUrl(url: string): boolean {
   try {
+    if (url.startsWith('data:image/')) return true;
+    if (url.includes('image.pollinations.ai')) return true;
+    if (url.includes('/v1/images/cache/')) return true;
     return /\.(png|jpe?g|gif|webp|svg)(\?.*)?$/i.test(url);
   } catch {
     return false;
@@ -121,33 +124,36 @@ export const RichLinkCard: React.FC<RichLinkCardProps> = ({ url, title, isCompac
   // 2. Direct Image Preview Card
   if (isImg) {
     return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="group block my-3 overflow-hidden rounded-2xl border border-cyan-500/30 bg-neutral-900 shadow-lg hover:border-cyan-500/60 transition-all"
-      >
-        <div className="relative max-h-60 overflow-hidden bg-neutral-950 flex items-center justify-center p-1">
+      <div className="my-3 overflow-hidden rounded-2xl border border-cyan-500/40 bg-neutral-950 shadow-2xl transition-all">
+        <div className="relative overflow-hidden bg-neutral-950 flex items-center justify-center">
           <img
             src={url}
             alt={displayTitle}
-            className="max-h-60 w-auto object-contain rounded-lg transition-transform duration-300 group-hover:scale-102"
+            className="w-full max-h-[480px] object-cover rounded-xl"
             loading="lazy"
           />
+          <div className="absolute bottom-2.5 right-2.5 flex items-center gap-2">
+            <a
+              href={url}
+              download="downloaded_artwork.jpg"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-neutral-900/90 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded-xl border border-neutral-700 backdrop-blur-md flex items-center gap-1.5 shadow-xl font-medium transition"
+            >
+              <ExternalLink className="w-3.5 h-3.5 text-cyan-300" /> Save HD
+            </a>
+          </div>
         </div>
-        <div className="p-3 flex items-center justify-between gap-2 bg-neutral-900/90">
+        <div className="p-3 flex items-center justify-between gap-2 bg-neutral-900/90 border-t border-neutral-800">
           <div className="flex items-center space-x-2 min-w-0">
             <ImageIcon className="h-4 w-4 text-cyan-400 shrink-0" />
-            <span className="text-xs font-semibold text-neutral-200 truncate group-hover:text-cyan-300 transition-colors">
+            <span className="text-xs font-semibold text-neutral-200 truncate">
               {displayTitle}
             </span>
           </div>
-          <div className="flex items-center space-x-1 text-[11px] text-cyan-400 font-medium">
-            <span>View Image</span>
-            <ExternalLink className="h-3 w-3" />
-          </div>
+          <span className="text-[11px] text-cyan-400 font-mono">Ultra-HD Image</span>
         </div>
-      </a>
+      </div>
     );
   }
 

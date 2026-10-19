@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="hi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini Web2API - Official Live Tester & Health Benchmark</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans flex flex-col antialiased selection:bg-blue-600 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50 px-4 lg:px-8 py-3.5 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/20">
+        <i class="fa-solid fa-bolt text-lg"></i>
+      </div>
+      <div>
+        <h1 class="text-base font-bold text-white flex items-center gap-2">
+          Gemini Web2API Live Tester
+          <span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-medium">Render Live</span>
+        </h1>
+        <p class="text-xs text-slate-400">Universal OpenAI-Compatible Endpoint Benchmark</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 text-xs">
+      <div class="hidden sm:flex items-center gap-2 bg-slate-800/80 px-3 py-1.5 rounded-lg border border-slate-700/60">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-slate-300">Cloudflare Protected</span>
+      </div>
+      <a href="https://superavon-1.onrender.com" target="_blank" class="text-blue-400 hover:text-blue-300 underline font-mono flex items-center gap-1">
+        superavon-1.onrender.com <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+    <!-- Configuration Box -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-blue-400"></i> Server & Model Configuration
+        </h2>
+        <span class="text-xs text-slate-400">Zero-Auth Active (Key optional)</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5">Base API URL</label>
+          <input type="text" id="apiBaseUrl" value="https://superavon-1.onrender.com/v1" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-blue-500 transition">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5">API Key (Optional / Blank)</label>
+          <input type="text" id="apiKey" value="sk-gemini" placeholder="sk-gemini ya khali chhod dein" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-100 font-mono focus:outline-none focus:border-blue-500 transition">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1.5">Model</label>
+          <select id="selectedModel" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-100 focus:outline-none focus:border-blue-500 transition">
+            <option value="gemini-3.7-flash" selected>gemini-3.7-flash (Latest & Recommended)</option>
+            <option value="gemini-3.6-flash">gemini-3.6-flash (Fast & Stable)</option>
+            <option value="gemini-3.5-flash-thinking">gemini-3.5-flash-thinking (Deep Reasoning)</option>
+            <option value="gemini-auto">gemini-auto (Dynamic Auto Route)</option>
+            <option value="gemini-flash-lite">gemini-flash-lite (Ultra Fast)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="flex items-center border-b border-slate-800 gap-2">
+      <button onclick="switchTab('single')" id="tabBtn-single" class="px-5 py-2.5 text-sm font-medium border-b-2 border-blue-500 text-blue-400 flex items-center gap-2 transition">
+        <i class="fa-solid fa-message"></i> Single Call / Chat
+      </button>
+      <button onclick="switchTab('batch')" id="tabBtn-batch" class="px-5 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+        <i class="fa-solid fa-gauge-high"></i> Batch Stress / Health Tester
+      </button>
+      <button onclick="switchTab('code')" id="tabBtn-code" class="px-5 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+        <i class="fa-solid fa-code"></i> Integration Code
+      </button>
+    </div>
+
+    <!-- TAB 1: Single Call / Chat -->
+    <div id="tabContent-single" class="space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div class="flex flex-col sm:flex-row gap-3">
+          <input type="text" id="singlePrompt" value="What is the capital of India? Reply in 1 word." placeholder="Apna sawaal likhein..." class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-blue-500 transition">
+          <button onclick="runSingleTest()" id="btnSendSingle" class="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-medium px-6 py-2.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-600/30 transition">
+            <i class="fa-solid fa-paper-plane"></i> Send Test Call
+          </button>
+        </div>
+
+        <!-- Single Result Box -->
+        <div id="singleResultContainer" class="hidden border border-slate-800 bg-slate-950/60 rounded-xl p-4 space-y-2">
+          <div class="flex items-center justify-between text-xs pb-2 border-b border-slate-800/80">
+            <span id="singleStatusBadge" class="px-2.5 py-0.5 rounded-full font-bold"></span>
+            <div class="flex items-center gap-4 text-slate-400">
+              <span id="singleLatency"></span>
+              <span id="singleTimestamp"></span>
+            </div>
+          </div>
+          <div>
+            <div class="text-xs font-semibold text-slate-400 mb-1">AI Response:</div>
+            <div id="singleOutputText" class="text-sm text-slate-100 whitespace-pre-wrap font-sans bg-slate-900/80 p-3 rounded-lg border border-slate-800"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Batch Stress Tester -->
+    <div id="tabContent-batch" class="hidden space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-5">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div>
+            <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+              <i class="fa-solid fa-list-check text-blue-400"></i> Automated Call Benchmark
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">Test multiple requests continuously with real-time analytics.</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-2 bg-slate-950 border border-slate-700 px-3 py-1.5 rounded-xl text-xs">
+              <span class="text-slate-400">Total Calls:</span>
+              <select id="batchCount" class="bg-transparent text-white font-bold outline-none">
+                <option value="10">10 Calls</option>
+                <option value="25">25 Calls</option>
+                <option value="50">50 Calls</option>
+                <option value="100">100 Calls (Heavy Test)</option>
+              </select>
+            </div>
+
+            <div class="flex items-center gap-2 bg-slate-950 border border-slate-700 px-3 py-1.5 rounded-xl text-xs">
+              <span class="text-slate-400">Delay:</span>
+              <select id="batchDelay" class="bg-transparent text-white font-bold outline-none">
+                <option value="500">0.5 sec (Fast)</option>
+                <option value="1000" selected>1.0 sec (Recommended)</option>
+                <option value="2000">2.0 sec (Safe)</option>
+              </select>
+            </div>
+
+            <button onclick="startBatchTest()" id="btnStartBatch" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-semibold px-5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition">
+              <i class="fa-solid fa-play"></i> Start Benchmark
+            </button>
+            <button onclick="stopBatchTest()" id="btnStopBatch" disabled class="bg-rose-600/40 opacity-50 cursor-not-allowed text-white font-semibold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition">
+              <i class="fa-solid fa-stop"></i> Stop
+            </button>
+          </div>
+        </div>
+
+        <!-- Metrics Dashboard -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+            <div class="text-[11px] text-slate-400 font-medium">Completed / Total</div>
+            <div class="text-xl font-bold text-white mt-1" id="metricProgress">0 / 0</div>
+          </div>
+          <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+            <div class="text-[11px] text-emerald-400 font-medium">Passed (200 OK)</div>
+            <div class="text-xl font-bold text-emerald-400 mt-1" id="metricPassed">0</div>
+          </div>
+          <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+            <div class="text-[11px] text-rose-400 font-medium">Failed / Errors</div>
+            <div class="text-xl font-bold text-rose-400 mt-1" id="metricFailed">0</div>
+          </div>
+          <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+            <div class="text-[11px] text-blue-400 font-medium">Avg Latency</div>
+            <div class="text-xl font-bold text-blue-400 mt-1" id="metricAvgLatency">0.00s</div>
+          </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="space-y-1">
+          <div class="flex justify-between text-xs text-slate-400">
+            <span id="batchStatusText">Ready to start test.</span>
+            <span id="batchPercentText">0%</span>
+          </div>
+          <div class="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800">
+            <div id="batchProgressBar" class="h-full bg-gradient-to-r from-blue-600 to-emerald-500 w-0 transition-all duration-300"></div>
+          </div>
+        </div>
+
+        <!-- Table of Logged Calls -->
+        <div class="border border-slate-800 rounded-xl overflow-hidden bg-slate-950">
+          <div class="max-h-72 overflow-y-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead class="bg-slate-900/90 sticky top-0 border-b border-slate-800 text-slate-400">
+                <tr>
+                  <th class="p-2.5 w-12 text-center">#</th>
+                  <th class="p-2.5 w-24">Status</th>
+                  <th class="p-2.5 w-20">Latency</th>
+                  <th class="p-2.5">AI Response Preview</th>
+                </tr>
+              </thead>
+              <tbody id="batchTableBody" class="divide-y divide-slate-800/60 font-mono text-slate-300">
+                <tr>
+                  <td colspan="4" class="p-6 text-center text-slate-500 font-sans">Click "Start Benchmark" to begin live call testing.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Integration Code Snippets -->
+    <div id="tabContent-code" class="hidden space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+          <i class="fa-solid fa-code text-blue-400"></i> Integration Codes (Cherry Studio, Python, cURL)
+        </h3>
+
+        <div class="space-y-3">
+          <div>
+            <div class="text-xs font-semibold text-slate-300 mb-1">Python (OpenAI SDK Compatible)</div>
+            <pre class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs font-mono text-emerald-400 overflow-x-auto"><code>from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://superavon-1.onrender.com/v1",
+    api_key="sk-gemini" # Kuch bhi likhein ya empty chhod dein
+)
+
+response = client.chat.completions.create(
+    model="gemini-3.7-flash",
+    messages=[{"role": "user", "content": "Explain AI in 1 sentence"}]
+)
+
+print(response.choices[0].message.content)</code></pre>
+          </div>
+
+          <div>
+            <div class="text-xs font-semibold text-slate-300 mb-1">cURL (Command Line / Terminal)</div>
+            <pre class="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs font-mono text-blue-400 overflow-x-auto"><code>curl -X POST https://superavon-1.onrender.com/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-gemini" \
+  -d '{
+    "model": "gemini-3.7-flash",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": false
+  }'</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-900 py-4 text-center text-xs text-slate-500">
+    Gemini Web2API Dedicated Live Health Dashboard & Tester &copy; 2026
+  </footer>
+
+  <script>
+    let isRunningBatch = false;
+    let shouldStopBatch = false;
+
+    function switchTab(tab) {
+      ['single', 'batch', 'code'].forEach(t => {
+        document.getElementById('tabContent-' + t).classList.add('hidden');
+        const btn = document.getElementById('tabBtn-' + t);
+        btn.classList.remove('border-blue-500', 'text-blue-400');
+        btn.classList.add('border-transparent', 'text-slate-400');
+      });
+      document.getElementById('tabContent-' + tab).classList.remove('hidden');
+      const activeBtn = document.getElementById('tabBtn-' + tab);
+      activeBtn.classList.add('border-blue-500', 'text-blue-400');
+      activeBtn.classList.remove('border-transparent', 'text-slate-400');
+    }
+
+    async function runSingleTest() {
+      const btn = document.getElementById('btnSendSingle');
+      const prompt = document.getElementById('singlePrompt').value.trim() || 'Hello';
+      const baseUrl = document.getElementById('apiBaseUrl').value.trim().replace(/\/+$/, '');
+      const key = document.getElementById('apiKey').value.trim();
+      const model = document.getElementById('selectedModel').value;
+
+      const container = document.getElementById('singleResultContainer');
+      const statusBadge = document.getElementById('singleStatusBadge');
+      const latencyBadge = document.getElementById('singleLatency');
+      const timestampBadge = document.getElementById('singleTimestamp');
+      const outputText = document.getElementById('singleOutputText');
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Requesting...';
+      container.classList.remove('hidden');
+      statusBadge.className = 'px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
+      statusBadge.textContent = 'CONNECTING...';
+      latencyBadge.textContent = '';
+      outputText.textContent = 'Waiting for response from ' + baseUrl + '...';
+
+      const t0 = performance.now();
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (key) headers['Authorization'] = 'Bearer ' + key;
+
+        const res = await fetch(baseUrl + '/chat/completions', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            model: model,
+            messages: [{ role: 'user', content: prompt }],
+            stream: false
+          })
+        });
+
+        const dur = ((performance.now() - t0) / 1000).toFixed(2);
+        latencyBadge.textContent = '⚡ ' + dur + 's';
+        timestampBadge.textContent = new Date().toLocaleTimeString();
+
+        if (res.ok) {
+          const data = await res.json();
+          const reply = data?.choices?.[0]?.message?.content || JSON.stringify(data);
+          statusBadge.className = 'px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+          statusBadge.textContent = '200 OK (SUCCESS)';
+          outputText.textContent = reply;
+        } else {
+          const errText = await res.text();
+          statusBadge.className = 'px-2.5 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
+          statusBadge.textContent = res.status + ' ERROR';
+          outputText.textContent = errText;
+        }
+      } catch (err) {
+        const dur = ((performance.now() - t0) / 1000).toFixed(2);
+        statusBadge.className = 'px-2.5 py-0.5 rounded-full font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30';
+        statusBadge.textContent = 'NETWORK / CORS ERROR';
+        latencyBadge.textContent = dur + 's';
+        outputText.textContent = 'Error: ' + err.message + '\n\nTip: Make sure the URL is accessible and server allows CORS.';
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Test Call';
+      }
+    }
+
+    async function startBatchTest() {
+      if (isRunningBatch) return;
+      isRunningBatch = true;
+      shouldStopBatch = false;
+
+      const totalCalls = parseInt(document.getElementById('batchCount').value, 10);
+      const delayMs = parseInt(document.getElementById('batchDelay').value, 10);
+      const baseUrl = document.getElementById('apiBaseUrl').value.trim().replace(/\/+$/, '');
+      const key = document.getElementById('apiKey').value.trim();
+      const model = document.getElementById('selectedModel').value;
+
+      const btnStart = document.getElementById('btnStartBatch');
+      const btnStop = document.getElementById('btnStopBatch');
+      btnStart.disabled = true;
+      btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+      btnStop.disabled = false;
+      btnStop.classList.remove('opacity-50', 'cursor-not-allowed');
+
+      const tbody = document.getElementById('batchTableBody');
+      tbody.innerHTML = '';
+
+      let passed = 0;
+      let failed = 0;
+      let totalLatency = 0;
+
+      const testPrompts = [
+        "What is 2+2? 1 word answer.",
+        "Color of sun? 1 word.",
+        "Capital of France? 1 word.",
+        "Say 'LIVE' 1 word.",
+        "Opposite of hot? 1 word.",
+        "2 * 3? 1 word.",
+        "Day after Friday? 1 word.",
+        "Name of our planet? 1 word."
+      ];
+
+      for (let i = 1; i <= totalCalls; i++) {
+        if (shouldStopBatch) {
+          document.getElementById('batchStatusText').textContent = 'Test paused/stopped by user.';
+          break;
+        }
+
+        const prompt = testPrompts[(i - 1) % testPrompts.length];
+        document.getElementById('batchStatusText').textContent = `Running call #${i} of ${totalCalls}...`;
+
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-900/60 transition';
+        tr.innerHTML = `
+          <td class="p-2.5 text-center text-slate-400 font-bold">${i}</td>
+          <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/20 text-amber-300">WAITING</span></td>
+          <td class="p-2.5 text-slate-400">...</td>
+          <td class="p-2.5 text-slate-400 truncate max-w-xs">Requesting...</td>
+        `;
+        tbody.prepend(tr);
+
+        const t0 = performance.now();
+        try {
+          const headers = { 'Content-Type': 'application/json' };
+          if (key) headers['Authorization'] = 'Bearer ' + key;
+
+          const res = await fetch(baseUrl + '/chat/completions', {
+            method: 'POST',
+            headers: headers,
+            body: JSON.stringify({
+              model: model,
+              messages: [{ role: 'user', content: prompt }],
+              stream: false
+            })
+          });
+
+          const dur = (performance.now() - t0) / 1000;
+          totalLatency += dur;
+
+          if (res.ok) {
+            passed++;
+            const data = await res.json();
+            const text = (data?.choices?.[0]?.message?.content || '').trim().replace(/\n/g, ' ');
+            tr.innerHTML = `
+              <td class="p-2.5 text-center text-slate-400 font-bold">${i}</td>
+              <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">200 OK</span></td>
+              <td class="p-2.5 text-slate-300 font-semibold">${dur.toFixed(2)}s</td>
+              <td class="p-2.5 text-slate-200 truncate max-w-xs">${text.slice(0, 50)}</td>
+            `;
+          } else {
+            failed++;
+            const err = await res.text();
+            tr.innerHTML = `
+              <td class="p-2.5 text-center text-slate-400 font-bold">${i}</td>
+              <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">${res.status} FAIL</span></td>
+              <td class="p-2.5 text-rose-400 font-semibold">${dur.toFixed(2)}s</td>
+              <td class="p-2.5 text-rose-400 truncate max-w-xs">${err.slice(0, 50)}</td>
+            `;
+          }
+        } catch (e) {
+          failed++;
+          const dur = (performance.now() - t0) / 1000;
+          tr.innerHTML = `
+            <td class="p-2.5 text-center text-slate-400 font-bold">${i}</td>
+            <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">ERR</span></td>
+            <td class="p-2.5 text-rose-400 font-semibold">${dur.toFixed(2)}s</td>
+            <td class="p-2.5 text-rose-400 truncate max-w-xs">${e.message}</td>
+          `;
+        }
+
+        // Update dashboard metrics
+        document.getElementById('metricProgress').textContent = `${i} / ${totalCalls}`;
+        document.getElementById('metricPassed').textContent = passed;
+        document.getElementById('metricFailed').textContent = failed;
+        const avg = (totalLatency / (passed + failed)).toFixed(2);
+        document.getElementById('metricAvgLatency').textContent = `${avg}s`;
+
+        const pct = Math.round((i / totalCalls) * 100);
+        document.getElementById('batchPercentText').textContent = `${pct}%`;
+        document.getElementById('batchProgressBar').style.width = `${pct}%`;
+
+        // Wait before next call if not stopped
+        if (i < totalCalls && !shouldStopBatch) {
+          await new Promise(r => setTimeout(r, delayMs));
+        }
+      }
+
+      if (!shouldStopBatch) {
+        document.getElementById('batchStatusText').textContent = `Benchmark completed! (${passed}/${totalCalls} passed)`;
+      }
+
+      btnStart.disabled = false;
+      btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+      btnStop.disabled = true;
+      btnStop.classList.add('opacity-50', 'cursor-not-allowed');
+      isRunningBatch = false;
+    }
+
+    function stopBatchTest() {
+      shouldStopBatch = true;
+      document.getElementById('batchStatusText').textContent = 'Stopping after current request...';
+    }
+  </script>
+</body>
+</html>

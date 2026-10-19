@@ -1,8 +1,17 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { RichLinkCard } from './RichLinkCard';
+import { Download, Maximize2, X, Sparkles, Image as ImageIcon } from 'lucide-react';
 
 interface FormattedTextProps {
-  content: string;
+  content?: string;
+  text?: string;
+}
+
+interface ImageBlockData {
+  src: string;
+  alt: string;
+  prompt?: string;
+  model?: string;
 }
 
 // Clean up unnecessary citations, markdown debris, and normalize links
@@ -37,14 +46,111 @@ const HIGHLIGHT_COLORS = [
 ];
 
 /**
+ * Dedicated Full Screen Zoom & Download Modal for Generated Images
+ */
+const AiImageRenderer: React.FC<{ data: ImageBlockData }> = ({ data }) => {
+  const [isZoomed, setIsZoomed] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const link = document.createElement('a');
+    link.href = data.src;
+    link.download = `${(data.alt || 'generated_artwork').replace(/[^a-zA-Z0-9_-]/g, '_')}.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <>
+      <div className="my-3 rounded-2xl overflow-hidden border border-slate-700/80 bg-neutral-950 shadow-2xl group relative max-w-xl transition-all hover:border-cyan-500/60">
+        {/* Glow backdrop */}
+        <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur-sm opacity-50 group-hover:opacity-100 transition duration-500 pointer-events-none" />
+
+        <div className="relative overflow-hidden bg-neutral-950">
+          <img
+            src={data.src}
+            alt={data.alt || 'AI Generated Image'}
+            onLoad={() => setIsLoaded(true)}
+            onClick={() => setIsZoomed(true)}
+            className="w-full max-h-[500px] object-cover rounded-xl transition duration-300 cursor-zoom-in block group-hover:scale-[1.01]"
+          />
+
+          {/* Action Overlay Floating Buttons */}
+          <div className="absolute bottom-2.5 right-2.5 flex items-center gap-2 opacity-95 group-hover:opacity-100 transition z-10">
+            <button
+              onClick={handleDownload}
+              className="bg-neutral-900/90 hover:bg-blue-600 text-white text-xs px-3 py-1.5 rounded-xl border border-neutral-700 backdrop-blur-md flex items-center gap-1.5 shadow-xl font-medium transition active:scale-95"
+            >
+              <Download className="w-3.5 h-3.5 text-cyan-300" /> Save HD
+            </button>
+            <button
+              onClick={() => setIsZoomed(true)}
+              className="bg-neutral-900/90 hover:bg-neutral-800 text-white p-1.5 rounded-xl border border-neutral-700 backdrop-blur-md shadow-xl transition active:scale-95"
+            >
+              <Maximize2 className="w-3.5 h-3.5 text-neutral-300" />
+            </button>
+          </div>
+        </div>
+
+        {data.alt && (
+          <div className="p-2.5 bg-neutral-900/90 border-t border-neutral-800/80 flex items-center justify-between text-xs text-neutral-300">
+            <div className="flex items-center gap-1.5 truncate mr-2">
+              <ImageIcon className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="truncate font-medium text-neutral-200">{data.alt}</span>
+            </div>
+            <span className="text-[11px] text-cyan-400 shrink-0 font-mono">FLUX.1 Ultra-HD</span>
+          </div>
+        )}
+      </div>
+
+      {/* Lightbox Zoom Modal */}
+      {isZoomed && (
+        <div
+          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex items-center justify-center p-4 transition-all"
+          onClick={() => setIsZoomed(false)}
+        >
+          <div
+            className="relative max-w-5xl w-full flex flex-col items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="absolute -top-12 right-0 flex items-center gap-3">
+              <button
+                onClick={handleDownload}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-lg active:scale-95 transition"
+              >
+                <Download className="w-3.5 h-3.5" /> Save HD
+              </button>
+              <button
+                onClick={() => setIsZoomed(false)}
+                className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white w-8 h-8 rounded-xl flex items-center justify-center text-sm border border-neutral-700 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="rounded-2xl overflow-hidden border border-neutral-700 shadow-2xl max-h-[85vh] flex items-center justify-center bg-neutral-950">
+              <img
+                src={data.src}
+                alt={data.alt || 'Zoomed Artwork'}
+                className="max-w-full max-h-[85vh] object-contain rounded-xl"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+/**
  * Parses and renders rich inline formatting with colorful highlights:
  * - **bold key terms** -> vibrant highlighted badges/texts
  * - `code snippets` -> stylish mono badges
  * - *italic* -> subtle emphasis
- * - [Link Title](URL) or raw URLs -> Compact interactive RichLinkCard (no ugly raw URL!)
+ * - [Link Title](URL) or raw URLs -> Compact interactive RichLinkCard
  */
 function renderInlineContent(text: string, colorIndex: number): React.ReactNode {
-  // Regex to match **bold**, `code`, *italic*, [Title](URL), or standalone http(s) URL
   const parts: React.ReactNode[] = [];
   const regex = /(\*\*.*?\*\*|`.*?`|\*.*?\*|\[[^\]]+\]\(https?:\/\/[^\s\)]+\)|https?:\/\/[^\s\)\],]+)/g;
   let lastIndex = 0;
@@ -117,13 +223,54 @@ function renderInlineContent(text: string, colorIndex: number): React.ReactNode 
   return parts.length > 0 ? parts : text;
 }
 
-export const FormattedAiResponse: React.FC<FormattedTextProps> = ({ content }) => {
-  const cleaned = cleanAiSymbols(content);
-  if (!cleaned.trim()) return null;
+export const FormattedAiResponse: React.FC<FormattedTextProps> = ({ content, text }) => {
+  const raw = content ?? text ?? '';
+  if (!raw) return null;
 
-  // Split content by paragraphs / lines
+  // ─── EXTRACT & ISOLATE REAL IMAGES (HTML <img .../>, Markdown ![alt](src), or raw base64) ───
+  const imageBlocks: ImageBlockData[] = [];
+  let processedContent = raw;
+
+  // 1. Match HTML <img ... src="..." ... /> across multiple lines
+  processedContent = processedContent.replace(/<img\s+([^>]*?)>/gis, (_fullMatch, attrs) => {
+    const srcMatch = attrs.match(/src=["']([^"']+)["']/i);
+    const altMatch = attrs.match(/alt=["']([^"']+)["']/i);
+    if (srcMatch && srcMatch[1]) {
+      const idx = imageBlocks.length;
+      imageBlocks.push({
+        src: srcMatch[1],
+        alt: altMatch ? altMatch[1] : 'AI Generated Art',
+      });
+      return `\n__AI_IMAGE_BLOCK_${idx}__\n`;
+    }
+    return '';
+  });
+
+  // 2. Match Markdown ![alt](src)
+  processedContent = processedContent.replace(/!\[(.*?)\]\s*\((data:image\/[^\s\)]+|https?:\/\/[^\s\)]+|\/v1\/images\/cache\/[^\s\)]+)\)/g, (_full, alt, src) => {
+    const idx = imageBlocks.length;
+    imageBlocks.push({
+      src: src,
+      alt: alt || 'AI Generated Art',
+    });
+    return `\n__AI_IMAGE_BLOCK_${idx}__\n`;
+  });
+
+  // 3. Match raw standalone data:image/jpeg;base64,... URLs
+  processedContent = processedContent.replace(/(data:image\/(?:jpeg|png|webp|gif);base64,[A-Za-z0-9+/=]+)/g, (_full, dataUrl) => {
+    const idx = imageBlocks.length;
+    imageBlocks.push({
+      src: dataUrl,
+      alt: 'AI Generated Art',
+    });
+    return `\n__AI_IMAGE_BLOCK_${idx}__\n`;
+  });
+
+  const cleaned = cleanAiSymbols(processedContent);
+  if (!cleaned.trim() && imageBlocks.length === 0) return null;
+
+  // Split content by lines
   const lines = cleaned.split('\n');
-
   let activeBulletIndex = 0;
 
   return (
@@ -132,6 +279,16 @@ export const FormattedAiResponse: React.FC<FormattedTextProps> = ({ content }) =
         const trimmed = line.trim();
         if (!trimmed) {
           return <div key={`empty-${idx}`} className="h-1.5" />;
+        }
+
+        // Image Placeholder Replacement
+        const imgBlockMatch = trimmed.match(/^__AI_IMAGE_BLOCK_(\d+)__$/);
+        if (imgBlockMatch) {
+          const blockIdx = parseInt(imgBlockMatch[1], 10);
+          const imgData = imageBlocks[blockIdx];
+          if (imgData) {
+            return <AiImageRenderer key={`ai-img-${blockIdx}`} data={imgData} />;
+          }
         }
 
         // 1. Code Block Fence

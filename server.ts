@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 
 // Run directly without proxy if PROXY_URL is empty
 const PROXY_URL = process.env.PROXY_URL || '';
-const CLOUDFLARE_WORKER_URL = process.env.CLOUDFLARE_WORKER_URL || 'https://square-union-5810.shivsingh9555564990.workers.dev';
+const CLOUDFLARE_WORKER_URL = process.env.CLOUDFLARE_WORKER_URL || '';
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const PYTHON_PORT = 8081;
 const isProduction = process.env.NODE_ENV === 'production';
@@ -124,6 +124,16 @@ async function startServer() {
 
   const app = express();
   app.use(express.json({ limit: '15mb' }));
+
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', '*');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
 
   // Live Proxy Check endpoint
   app.get('/api/proxy-status', (req: Request, res: Response) => {
