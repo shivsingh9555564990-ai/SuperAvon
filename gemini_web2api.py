@@ -349,36 +349,27 @@ def log(msg: str):
 
 
 def load_cookie() -> tuple:
-    """Load cookie from direct string, env var, or file. Returns (cookie_str, sapisid)."""
-    cookie_str = CONFIG.get("cookie") or os.environ.get("GEMINI_COOKIE") or os.environ.get("COOKIE") or ""
-    
-    if not cookie_str:
-        cookie_file = CONFIG.get("cookie_file") or "./cookie.json"
-        if os.path.exists(cookie_file):
-            try:
-                with open(cookie_file, "r") as f:
-                    content = f.read().strip()
-                if content.startswith("{"):
-                    data = json.loads(content)
-                    cookie_str = data.get("cookie", "") or data.get("cookies", "")
-                else:
-                    cookie_str = content
-            except Exception as e:
-                log(f"Cookie file read error: {e}")
-
-    if not cookie_str:
+    """Load cookie from file. Returns (cookie_str, sapisid)."""
+    cookie_file = CONFIG.get("cookie_file")
+    if not cookie_file:
         return "", None
-
-    sapisid = None
-    if "SAPISID=" in cookie_str:
-        try:
-            m = re.search(r'SAPISID=([^;]+)', cookie_str)
-            if m:
-                sapisid = m.group(1).strip()
-        except Exception:
-            pass
-
-    return cookie_str, sapisid
+    if not os.path.exists(cookie_file):
+        return "", None
+    try:
+        with open(cookie_file, "r") as f:
+            content = f.read().strip()
+        if content.startswith("{"):
+            data = json.loads(content)
+            cookie_str = data.get("cookie", "")
+            sapisid = data.get("sapisid", "")
+        else:
+            cookie_str = content
+            pairs = dict(p.split("=", 1) for p in cookie_str.split("; ") if "=" in p)
+            sapisid = pairs.get("SAPISID", "")
+        return cookie_str, sapisid if sapisid else None
+    except Exception as e:
+        log(f"Cookie load error: {e}")
+        return "", None
 
 
 def make_sapisidhash(sapisid: str) -> str:
@@ -516,18 +507,11 @@ def gemini_stream_generate(prompt: str, model_id: int, think_mode: int, file_ref
     reqid = int(time.time()) % 1000000
     prefix = account_prefix()
     headers = {
-        "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
+        "Content-Type": "application/x-www-form-urlencoded",
         "Origin": "https://gemini.google.com",
         "Referer": f"https://gemini.google.com{prefix}/app",
         "X-Same-Domain": "1",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "sec-ch-ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"Windows"',
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin",
-        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     }
     if prefix:
         headers["X-Goog-AuthUser"] = str(CONFIG["auth_user"])
@@ -634,18 +618,11 @@ def gemini_stream_generate_iter(prompt: str, model_id: int, think_mode: int, fil
     prefix = account_prefix()
 
     headers = {
-        "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
+        "Content-Type": "application/x-www-form-urlencoded",
         "Origin": "https://gemini.google.com",
         "Referer": f"https://gemini.google.com{prefix}/app",
         "X-Same-Domain": "1",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "sec-ch-ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"Windows"',
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-origin",
-        "Accept-Language": "en-US,en;q=0.9",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     }
     if prefix:
         headers["X-Goog-AuthUser"] = str(CONFIG["auth_user"])
